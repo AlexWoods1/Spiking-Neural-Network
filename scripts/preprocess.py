@@ -7,7 +7,9 @@ from spiking_neural_network.images import (
     ImageError,
     intensity_normalize,
     load_grayscale,
+    resize_image,
 )
+from spiking_neural_network.plotting import plot_spike_encoding
 from spiking_neural_network.validation import relative_error
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -15,10 +17,11 @@ DEFAULT_IMAGE_PATH = PROJECT_ROOT / "Images" / "Screenshot 2025-05-02 185435.png
 
 
 def main() -> None:
-    """Load an image, encode spikes, and print validation relative error."""
+    """Load an image, encode spikes, print validation error, and plot spikes."""
     try:
         config = EncodingConfig(t_steps=100, seed=42)
         image = load_grayscale(DEFAULT_IMAGE_PATH)
+        image = resize_image(image, (32, 32))
         rates = intensity_normalize(image)
 
         encoding = SpikeEncoding.from_rates(
@@ -30,6 +33,7 @@ def main() -> None:
                 actual=encoding.never_spike_count,
             )
         )
+        plot_spike_encoding(encoding, image=image)
     except (ImageError, EncodingError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
