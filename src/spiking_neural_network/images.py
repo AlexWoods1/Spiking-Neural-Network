@@ -14,11 +14,10 @@ class ImageError(Exception):
     """Generic error for image-related issues."""
 
 
-def load_grayscale(path:str | Path) -> np.ndarray:
+def load_grayscale(path: str | Path) -> np.ndarray:
     path = Path(path)
     if not path.is_file():
         raise ImageError(f"Image file not found: {path}")
-    
     if path.suffix.lower() not in SUPPORTED_IMAGE_FORMATS:
         raise ImageError(f"Unsupported image format: {path.suffix}")
     
