@@ -19,12 +19,28 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.29.0",
     "black~=26.0",
     "pytest>=8.0",
+    "pytest-cov>=6.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=spiking_neural_network --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["spiking_neural_network"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+
+[tool.basedpyright]
+pythonVersion = "3.14"
+include = ["src/spiking_neural_network", "tests"]
+typeCheckingMode = "standard"
 
 [tool.black]
 target-version = ["py314"]

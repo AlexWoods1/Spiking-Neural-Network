@@ -74,5 +74,15 @@ def resize_image(image: np.ndarray, size: tuple[int, int]) -> np.ndarray:
 
     Returns:
         A 2D grayscale array with the given size.
+
+    Raises:
+        ImageError: If ``image`` is not 2D or ``size`` is invalid.
     """
+    if image.ndim != 2:
+        raise ImageError(f"Image must be 2D grayscale: {image.shape}")
+
+    width, height = size
+    if width < 1 or height < 1:
+        raise ImageError(f"Resize dimensions must be positive: {size}")
+
     return cv2.resize(image, size, interpolation=cv2.INTER_AREA)

@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -9,6 +10,7 @@ from spiking_neural_network.images import (
     intensity_normalize,
     load_grayscale,
     resize_image,
+    show,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +51,17 @@ def test_resize_image_changes_shape() -> None:
     assert resized.shape == (32, 32)
 
 
+def test_resize_image_rejects_non_2d_input() -> None:
+    with pytest.raises(ImageError, match="Image must be 2D grayscale"):
+        resize_image(np.ones((2, 2, 3)), (8, 8))
+
+
+def test_resize_image_rejects_invalid_size() -> None:
+    image = np.zeros((8, 8), dtype=np.uint8)
+    with pytest.raises(ImageError, match="Resize dimensions must be positive"):
+        resize_image(image, (0, 8))
+
+
 def test_load_grayscale_rejects_missing_file(tmp_path: Path) -> None:
     missing = tmp_path / "missing.png"
     with pytest.raises(ImageError, match="Image file not found"):
@@ -73,6 +86,13 @@ def test_load_grayscale_reads_png_file(tmp_path: Path) -> None:
     assert loaded.shape == (4, 4)
 
 
+def test_load_grayscale_rejects_corrupt_png(tmp_path: Path) -> None:
+    corrupt = tmp_path / "corrupt.png"
+    corrupt.write_bytes(b"not-a-real-png")
+    with pytest.raises(ImageError, match="Failed to load image"):
+        load_grayscale(corrupt)
+
+
 @pytest.mark.skipif(not SAMPLE_IMAGE.is_file(), reason="Sample project image missing")
 def test_load_grayscale_reads_project_sample_image() -> None:
     image = load_grayscale(SAMPLE_IMAGE)
@@ -80,3 +100,17 @@ def test_load_grayscale_reads_project_sample_image() -> None:
     assert image.ndim == 2
     assert image.dtype == np.uint8
     assert image.size > 0
+
+
+def test_show_displays_image() -> None:
+    image = np.zeros((4, 4), dtype=np.uint8)
+
+    with (
+        patch("spiking_neural_network.images.cv2.imshow") as mock_imshow,
+        patch("spiking_neural_network.images.cv2.waitKey", return_value=0),
+        patch("spiking_neural_network.images.cv2.destroyAllWindows") as mock_destroy,
+    ):
+        show(image)
+
+    mock_imshow.assert_called_once_with("Image", image)
+    mock_destroy.assert_called_once()
