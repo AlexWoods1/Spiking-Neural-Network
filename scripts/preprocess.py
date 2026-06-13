@@ -1,8 +1,6 @@
-import cv2
-
 from spiking_neural_network.config import EncodingConfig
 from spiking_neural_network.encoding import SpikeEncoding
-from spiking_neural_network.images import intensity_normalize
+from spiking_neural_network.images import intensity_normalize, load_grayscale
 from spiking_neural_network.validation import relative_error
 
 DEFAULT_IMAGE_PATH = "Images/Screenshot 2025-05-02 185435.png"
@@ -10,7 +8,7 @@ DEFAULT_IMAGE_PATH = "Images/Screenshot 2025-05-02 185435.png"
 
 def main() -> None:
     config = EncodingConfig(t_steps=100, seed=42)
-    image = cv2.imread(DEFAULT_IMAGE_PATH, cv2.IMREAD_GRAYSCALE)
+    image = load_grayscale(DEFAULT_IMAGE_PATH)
     rates = intensity_normalize(image)
 
     encoding = SpikeEncoding.from_rates(
