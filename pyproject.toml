@@ -21,3 +21,5 @@ build-backend = "uv_build"
 dev = [
     "black~=26.0",
 ]
+[tool.black]
+target-version = ["py314"]
