@@ -1,6 +1,6 @@
 # Spiking-Neural-Network
 
-Convert grayscale images into Poisson spike trains for spiking neural network experiments.
+neuron think strong.
 
 ## Requirements
 
