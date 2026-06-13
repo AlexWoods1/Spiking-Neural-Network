@@ -20,6 +20,11 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "black~=26.0",
+    "pytest>=8.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.black]
 target-version = ["py314"]
