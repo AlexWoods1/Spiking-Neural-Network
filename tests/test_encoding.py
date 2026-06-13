@@ -30,6 +30,24 @@ def test_from_rates_rejects_non_2d_rates() -> None:
         SpikeEncoding.from_rates(rates=np.ones((2, 2, 2)), t=5)
 
 
+def test_from_rates_rejects_empty_rates() -> None:
+    with pytest.raises(EncodingError, match="non-zero dimensions"):
+        SpikeEncoding.from_rates(rates=np.empty((0, 2)), t=5)
+
+
+def test_from_rates_rejects_non_finite_rates() -> None:
+    rates = np.array([[0.1, np.nan], [0.2, 0.3]])
+    with pytest.raises(EncodingError, match="non-finite"):
+        SpikeEncoding.from_rates(rates=rates, t=5)
+
+
+def test_from_rates_without_rng_still_produces_samples() -> None:
+    rates = np.full((2, 2), 0.5)
+    encoding = SpikeEncoding.from_rates(rates=rates, t=4)
+
+    assert encoding.samples.shape == (4, 2, 2)
+
+
 def test_trace_at_returns_time_series() -> None:
     rates = np.full((3, 3), 0.8)
     encoding = SpikeEncoding.from_rates(rates=rates, t=7, rng=np.random.default_rng(1))
@@ -44,6 +62,31 @@ def test_trace_at_rejects_out_of_bounds_index() -> None:
 
     with pytest.raises(EncodingError, match="row out of bounds"):
         encoding.trace_at(row=3, col=0)
+
+
+def test_trace_at_rejects_out_of_bounds_col() -> None:
+    rates = np.full((3, 3), 0.8)
+    encoding = SpikeEncoding.from_rates(rates=rates, t=5, rng=np.random.default_rng(1))
+
+    with pytest.raises(EncodingError, match="col out of bounds"):
+        encoding.trace_at(row=0, col=3)
+
+
+def test_cumulative_sum_tracks_spikes_over_time() -> None:
+    rates = np.full((2, 2), 1.0)
+    encoding = SpikeEncoding.from_rates(rates=rates, t=3, rng=np.random.default_rng(4))
+
+    cumulative = encoding.cumulative_sum
+    assert cumulative.shape == (3, 2, 2)
+    assert np.all(cumulative[-1] == encoding.samples.sum(axis=0))
+
+
+def test_expected_never_spike_rejects_invalid_t() -> None:
+    rates = np.full((2, 2), 0.1)
+    encoding = SpikeEncoding.from_rates(rates=rates, t=5, rng=np.random.default_rng(0))
+
+    with pytest.raises(EncodingError, match="t must be at least 1"):
+        encoding.expected_never_spike(t=0)
 
 
 def test_zero_rates_never_spike() -> None:
