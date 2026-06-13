@@ -63,3 +63,16 @@ def intensity_normalize(image: np.ndarray) -> np.ndarray:
     if img_min == img_max:
         return np.zeros_like(image, dtype=float)
     return (image - img_min) / (img_max - img_min)
+
+
+def resize_image(image: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    """Resize an image to a given size.
+
+    Args:
+        image: 2D grayscale array.
+        size: Tuple of (width, height).
+
+    Returns:
+        A 2D grayscale array with the given size.
+    """
+    return cv2.resize(image, size, interpolation=cv2.INTER_AREA)
