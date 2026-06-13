@@ -1,7 +1,7 @@
 [project]
 name = "spiking-neural-network"
 version = "0.1.0"
-description = "Add your description here"
+description = "Image-to-spike encoding for spiking neural network experiments"
 readme = "README.md"
 authors = [
     { name = "AlexWoods1", email = "AlexWoods1@users.noreply.github.com" }
