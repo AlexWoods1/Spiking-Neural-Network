@@ -74,6 +74,24 @@ class SpikeEncoding:
         samples = _poisson_samples(rates, t, rng)
         return cls(rates=rates, samples=samples, first_spikes=_first_spike(samples))
 
+    @classmethod
+    def from_samples(
+        cls,
+        rates: np.ndarray,
+        samples: np.ndarray,
+    ) -> "SpikeEncoding":
+        """Build an encoding object from an existing sample tensor."""
+        _validate_rates(rates)
+        if samples.ndim != rates.ndim + 1:
+            raise EncodingError(
+                f"Samples must have shape (T, H, W); got {samples.shape} for rates {rates.shape}"
+            )
+        if samples.shape[1:] != rates.shape:
+            raise EncodingError(
+                f"Sample spatial shape {samples.shape[1:]} must match rates {rates.shape}"
+            )
+        return cls(rates=rates, samples=samples, first_spikes=_first_spike(samples))
+
     @property
     def cumulative_sum(self) -> np.ndarray:
         """Cumulative spike counts over time with shape ``(T, H, W)``."""

@@ -111,3 +111,14 @@ def test_from_rates_is_reproducible_with_seed() -> None:
     second = SpikeEncoding.from_rates(rates=rates, t=8, rng=np.random.default_rng(99))
 
     assert np.array_equal(first.samples, second.samples)
+
+
+def test_from_samples_builds_encoding() -> None:
+    rates = np.full((2, 2), 0.5)
+    samples = np.zeros((5, 2, 2))
+    samples[1, 0, 0] = 1
+
+    encoding = SpikeEncoding.from_samples(rates=rates, samples=samples)
+
+    assert encoding.samples.shape == (5, 2, 2)
+    assert encoding.first_spikes[0, 0] == 1
