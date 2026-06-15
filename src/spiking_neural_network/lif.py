@@ -65,7 +65,9 @@ def synaptic_drive(spikes_in: np.ndarray, weights: np.ndarray) -> np.ndarray:
     if spikes_in.ndim != 2:
         raise ValueError(f"spikes_in must have shape (T, N_pre); got {spikes_in.shape}")
     if weights.ndim != 2:
-        raise ValueError(f"weights must have shape (N_post, N_pre); got {weights.shape}")
+        raise ValueError(
+            f"weights must have shape (N_post, N_pre); got {weights.shape}"
+        )
     if spikes_in.shape[1] != weights.shape[1]:
         raise ValueError(
             "spikes_in neuron count must match weights columns: "

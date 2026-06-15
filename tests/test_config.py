@@ -3,7 +3,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from spiking_neural_network.config import EncodingConfig, LIFConfig, LayerConfig, NetworkConfig, PreprocessConfig
+from spiking_neural_network.config import (
+    EncodingConfig,
+    LIFConfig,
+    LayerConfig,
+    NetworkConfig,
+    PreprocessConfig,
+)
 
 
 def test_encoding_config_defaults() -> None:
