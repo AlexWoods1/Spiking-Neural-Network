@@ -1,4 +1,4 @@
-"""Parity tests for the JAX AdaLi training ops."""
+"""Tests for the JAX AdaLi training ops."""
 
 from __future__ import annotations
 
@@ -13,8 +13,9 @@ import pytest
 pytest.importorskip("jax")
 import jax.numpy as jnp
 
-from spiking_neural_network.adali import jax_ops, numpy_ops
+from spiking_neural_network.adali import jax_ops
 from spiking_neural_network.adali.model import AdaLi
+from spiking_neural_network.adali.weights import init_weights
 from spiking_neural_network.config import AdaLiConfig
 from spiking_neural_network.schedules import EpochContext
 from tests.helpers import spike_batch
@@ -25,9 +26,9 @@ def _numpy_weights_to_jax(weights: list[np.ndarray]) -> tuple[jnp.ndarray, ...]:
 
 
 class TestJaxOps:
-    def test_forward_pass_matches_numpy(self) -> None:
+    def test_forward_pass_returns_expected_logits_shape(self) -> None:
         rng = np.random.default_rng(0)
-        weights = numpy_ops.init_weights(
+        weights = init_weights(
             input_dim=784,
             hidden_dims=(8,),
             output_dim=3,
@@ -39,13 +40,6 @@ class TestJaxOps:
         v_th = 1.0
         decay = 0.9
 
-        numpy_cache = numpy_ops.forward_pass(
-            weights,
-            sample,
-            leak=leak,
-            v_th=v_th,
-            decay=decay,
-        )
         jax_cache = jax_ops.forward_pass(
             _numpy_weights_to_jax(weights),
             jnp.asarray(sample),
@@ -54,64 +48,12 @@ class TestJaxOps:
             decay=decay,
         )
 
-        np.testing.assert_allclose(
-            np.asarray(jax_cache.logits),
-            numpy_cache.logits,
-            rtol=1e-6,
-        )
-        assert jax_cache.timesteps == numpy_cache.timesteps
-
-    def test_adali_surrogate_matches_numpy(self) -> None:
-        u = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
-        numpy_slope = numpy_ops.adali_surrogate(
-            u,
-            v_minus=0.5,
-            v_plus=1.5,
-            v_th=1.0,
-            alpha=0.5,
-            beta=0.5,
-        )
-        jax_slope = np.asarray(
-            jax_ops.adali_surrogate(
-                jnp.asarray(u),
-                v_minus=0.5,
-                v_plus=1.5,
-                v_th=1.0,
-                alpha=0.5,
-                beta=0.5,
-            )
-        )
-
-        np.testing.assert_allclose(jax_slope, numpy_slope)
-
-    def test_single_sample_grad_matches_numpy(self) -> None:
-        model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3))
-        boundary = model.boundaries(EpochContext(1, 3))
-        sample = spike_batch(1)[0]
-        weights = _numpy_weights_to_jax(model.weights)
-
-        _, jax_grads = jax_ops._single_sample_grad(
-            weights,
-            jnp.asarray(sample),
-            jnp.int32(1),
-            model.leak,
-            model.config.v_th,
-            model.config.decay,
-            boundary.v_minus,
-            boundary.v_plus,
-            model.config.alpha,
-            model.config.beta,
-            model.config.focal_gamma,
-            model.config.focal_alpha,
-        )
-        _, numpy_grads = model._training_gradients(sample, 1, boundary)
-
-        for jax_grad, numpy_grad in zip(jax_grads, numpy_grads, strict=True):
-            np.testing.assert_allclose(np.asarray(jax_grad), numpy_grad, rtol=1e-5)
+        assert np.asarray(jax_cache.logits).shape == (3,)
+        assert jax_cache.timesteps == 5
 
     def test_forward_logits_matches_forward_pass(self) -> None:
         rng = np.random.default_rng(0)
-        weights = numpy_ops.init_weights(
+        weights = init_weights(
             input_dim=784,
             hidden_dims=(8,),
             output_dim=3,
@@ -147,7 +89,7 @@ class TestJaxOps:
 
     def test_batch_forward_logits_matches_single_sample(self) -> None:
         rng = np.random.default_rng(1)
-        weights = numpy_ops.init_weights(
+        weights = init_weights(
             input_dim=784,
             hidden_dims=(8,),
             output_dim=3,
@@ -215,7 +157,7 @@ class TestJaxOps:
 
     def test_batched_forward_matches_single_sample(self) -> None:
         rng = np.random.default_rng(2)
-        weights = numpy_ops.init_weights(
+        weights = init_weights(
             input_dim=784,
             hidden_dims=(8,),
             output_dim=3,

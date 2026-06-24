@@ -9,7 +9,6 @@ import numpy as np
 import pytest
 
 from spiking_neural_network.adali.model import AdaLi
-from spiking_neural_network.builder import ModelBuilder
 from spiking_neural_network.config import AdaLiConfig, BaseModelConfig, DataModuleConfig
 from spiking_neural_network.data_module import (
     ArraySampleSource,
@@ -28,7 +27,6 @@ from spiking_neural_network.trainer import BaseModel
 from spiking_neural_network.pipeline import (
     build_adali_model,
     build_mnist_data_module,
-    default_split_limits,
     full_mnist_split_sizes,
 )
 from spiking_neural_network.plotting import (
@@ -117,7 +115,7 @@ def test_print_prediction_summary_writes_per_class_counts(
 
 
 def test_collect_predictions_returns_full_score_matrix() -> None:
-    model = ModelBuilder.build("adali", AdaLiConfig(hidden_dims=(8,), output_dim=3))
+    model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3))
     module = DataModule(DataModuleConfig(batch_size=2, shuffle=False))
     module.test = ArraySampleSource(
         np.ones((4, 4, 784), dtype=np.float64),
@@ -146,7 +144,7 @@ def test_build_confusion_matrix_keeps_full_label_grid() -> None:
 
 
 def test_collect_predictions_matches_model_predict() -> None:
-    model = ModelBuilder.build("adali", AdaLiConfig(hidden_dims=(8,), output_dim=3))
+    model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3))
     module = DataModule(DataModuleConfig(batch_size=2, shuffle=False))
     module.test = ArraySampleSource(
         np.ones((3, 4, 784), dtype=np.float64),
@@ -164,7 +162,7 @@ def test_collect_predictions_matches_model_predict() -> None:
 
 
 def test_collect_predictions_uses_batch_probabilities_for_jax_model() -> None:
-    model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3), backend="jax")
+    model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3))
     module = DataModule(DataModuleConfig(batch_size=2, shuffle=False))
     module.test = ArraySampleSource(
         np.ones((4, 4, 784), dtype=np.float64),
@@ -218,35 +216,28 @@ def test_plot_classified_sample_grid_runs_without_display() -> None:
     )
 
 
-def test_default_split_limits_use_full_mnist() -> None:
-    assert default_split_limits() == (None, None, None)
+def test_full_mnist_split_sizes_cover_official_splits() -> None:
     assert full_mnist_split_sizes() == (50_000, 10_000, 10_000)
 
 
-def test_build_adali_model_respects_backend() -> None:
+def test_build_adali_model_returns_adali() -> None:
     model = build_adali_model(
         hidden=8,
         learning_rate=0.1,
         lr_final=0.01,
         weight_scale=0.2,
         seed=1,
-        backend="jax",
     )
 
     assert isinstance(model, AdaLi)
-    assert model.backend == "jax"
 
 
-def test_build_parser_default_limits_use_pipeline() -> None:
+def test_build_parser_default_limits_are_none() -> None:
     args = build_parser().parse_args([])
-    expected = default_split_limits()
 
-    assert (args.train_limit, args.val_limit, args.test_limit) == expected
-
-
-def test_build_parser_defaults_to_jax_backend() -> None:
-    args = build_parser().parse_args([])
-    assert args.backend == "jax"
+    assert args.train_limit is None
+    assert args.val_limit is None
+    assert args.test_limit is None
 
 
 def test_build_parser_disables_in_loop_test_eval_by_default() -> None:

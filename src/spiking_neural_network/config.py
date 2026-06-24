@@ -172,7 +172,6 @@ class BaseModelConfig:
     model_name: str
     input_dim: int | None
     output_dim: int | None
-    test_size: float = 0.2
     seed: int = 42
 
     def __post_init__(self) -> None:
@@ -184,8 +183,6 @@ class BaseModelConfig:
             raise ParameterError("input_dim must be an integer")
         if self.output_dim is not None and not isinstance(self.output_dim, int):
             raise ParameterError("output_dim must be an integer")
-        if self.test_size is not None and not isinstance(self.test_size, float):
-            raise ParameterError("test_size must be a float")
         if self.seed is not None and not isinstance(self.seed, int):
             raise ParameterError("seed must be an integer")
 
@@ -197,9 +194,6 @@ class BaseModelConfig:
 
         if self.output_dim is not None and self.output_dim <= 0:
             raise ParameterError("output_dim must be positive")
-
-        if self.test_size <= 0 or self.test_size >= 1:
-            raise ParameterError("test_size must be between 0 and 1")
 
 
 @dataclass(frozen=True)
