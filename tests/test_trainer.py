@@ -6,8 +6,13 @@ import numpy as np
 import pytest
 
 from spiking_neural_network.adali.model import AdaLi
-from spiking_neural_network.config import AdaLiConfig, BaseModelConfig, TrainingConfig
-from spiking_neural_network.data_module import DataModule, DataModuleConfig
+from spiking_neural_network.config import (
+    AdaLiConfig,
+    BaseModelConfig,
+    DataModuleConfig,
+    TrainingConfig,
+)
+from spiking_neural_network.data_module import DataModule
 from spiking_neural_network.schedules import EpochContext, EpochTrainingState
 from spiking_neural_network.trainer import BaseModel, Trainer
 from tests.helpers import array_source, spike_batch

@@ -139,7 +139,7 @@ def biophysical_system_derivative(
     i_ionic = i_na + i_k + i_l
 
     if v_membrane.shape[0] >= 2:
-        grad_v = jnp.gradient(v_membrane, axis=0)
+        grad_v = jnp.asarray(jnp.gradient(v_membrane, axis=0))
         i_spatial = grad_v / system.axial_resistances
     else:
         i_spatial = jnp.zeros_like(v_membrane)

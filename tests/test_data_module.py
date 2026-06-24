@@ -11,6 +11,7 @@ from spiking_neural_network.config import DataModuleConfig
 from spiking_neural_network.data_module import (
     ArraySampleSource,
     DataModule,
+    DataProvider,
     MNISTDataConfig,
     MNISTDataProvider,
     MNISTSampleSource,
@@ -234,12 +235,15 @@ class TestDataModule:
             module.num_batches(module.train)
 
     def test_from_provider_populates_splits(self) -> None:
-        class _Provider:
+        class _Provider(DataProvider):
             def build_splits(self):
                 return array_source(3), array_source(2), array_source(1)
 
         module = DataModule.from_provider(DataModuleConfig(), _Provider())
 
+        assert module.train is not None
+        assert module.val is not None
+        assert module.test is not None
         assert len(module.train) == 3
         assert len(module.val) == 2
         assert len(module.test) == 1
@@ -261,6 +265,9 @@ class TestDataModule:
             ),
         )
 
+        assert module.train is not None
+        assert module.val is not None
+        assert module.test is not None
         assert len(module.train) == train_limit
         assert len(module.val) == val_limit
         assert len(module.test) == test_limit

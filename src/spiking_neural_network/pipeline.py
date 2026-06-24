@@ -6,10 +6,9 @@ from pathlib import Path
 from typing import Literal
 
 from spiking_neural_network.adali.model import AdaLi
-from spiking_neural_network.config import AdaLiConfig
+from spiking_neural_network.config import AdaLiConfig, DataModuleConfig
 from spiking_neural_network.data_module import (
     DataModule,
-    DataModuleConfig,
     MNISTDataConfig,
 )
 from spiking_neural_network.schedules import cosine_learning_rate

@@ -10,13 +10,11 @@ import pytest
 
 from spiking_neural_network.adali.model import AdaLi
 from spiking_neural_network.builder import ModelBuilder
-from spiking_neural_network.config import AdaLiConfig
+from spiking_neural_network.config import AdaLiConfig, BaseModelConfig, DataModuleConfig
 from spiking_neural_network.data_module import (
     ArraySampleSource,
     DataModule,
-    DataModuleConfig,
 )
-from spiking_neural_network.config import BaseModelConfig
 from spiking_neural_network.evaluation import (
     build_confusion_matrix,
     classify_image,

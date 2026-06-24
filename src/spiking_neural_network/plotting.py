@@ -2,6 +2,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
 
 from spiking_neural_network.encoding import SpikeEncoding
 
@@ -282,7 +283,7 @@ def plot_classified_sample_grid(
 
 
 def _plot_confusion_matrix_on_axis(
-    axis: plt.Axes,
+    axis: Axes,
     matrix: np.ndarray,
     *,
     title: str,

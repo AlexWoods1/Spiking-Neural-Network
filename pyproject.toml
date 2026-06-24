@@ -44,6 +44,7 @@ show_missing = true
 [tool.basedpyright]
 pythonVersion = "3.14"
 include = ["src/spiking_neural_network", "tests"]
+extraPaths = ["scripts"]
 typeCheckingMode = "standard"
 
 [tool.black]

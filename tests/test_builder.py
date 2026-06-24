@@ -17,10 +17,12 @@ class TestModelBuilder:
 
     def test_build_adali_defaults_to_numpy_backend(self) -> None:
         model = ModelBuilder.build("adali", AdaLiConfig())
+        assert isinstance(model, AdaLi)
         assert model.backend == "numpy"
 
     def test_build_adali_accepts_jax_backend(self) -> None:
         model = ModelBuilder.build("adali", AdaLiConfig(), backend="jax")
+        assert isinstance(model, AdaLi)
         assert model.backend == "jax"
 
     def test_build_rejects_wrong_config_type(self) -> None:

@@ -248,6 +248,7 @@ class TestAdaLiJaxBackend:
 
     def test_model_builder_passes_jax_backend(self) -> None:
         model = ModelBuilder.build("adali", AdaLiConfig(), backend="jax")
+        assert isinstance(model, AdaLi)
         assert model.backend == "jax"
 
     def test_jax_batch_step_rejects_non_adali_config(self) -> None:
