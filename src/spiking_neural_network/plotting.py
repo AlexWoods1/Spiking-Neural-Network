@@ -281,6 +281,36 @@ def plot_classified_sample_grid(
         plt.close(fig)
 
 
+def _plot_confusion_matrix_on_axis(
+    axis: plt.Axes,
+    matrix: np.ndarray,
+    *,
+    title: str,
+    display_labels: list[str],
+    values_format: str,
+) -> None:
+    """Render a confusion matrix heatmap with per-cell annotations."""
+    axis.imshow(matrix, cmap="Blues")
+    axis.set_xticks(range(len(display_labels)))
+    axis.set_yticks(range(len(display_labels)))
+    axis.set_xticklabels(display_labels)
+    axis.set_yticklabels(display_labels)
+    axis.set_title(title)
+    axis.set_xlabel("Predicted label")
+    axis.set_ylabel("True label")
+    for row in range(matrix.shape[0]):
+        for col in range(matrix.shape[1]):
+            value = matrix[row, col]
+            text = (
+                format(value, values_format)
+                if values_format != "d"
+                else str(int(value))
+            )
+            axis.text(
+                col, row, text, ha="center", va="center", color="black", fontsize=9
+            )
+
+
 def plot_evaluation_figures(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -289,34 +319,35 @@ def plot_evaluation_figures(
     show: bool = True,
 ) -> None:
     """Plot count and recall confusion matrices."""
-    from sklearn.metrics import ConfusionMatrixDisplay
+    from spiking_neural_network.evaluation import build_confusion_matrix
 
     if y_score.ndim != 2:
         raise ValueError("y_score must be a 2D array of class probabilities")
 
-    labels = list(range(y_score.shape[1]))
-    display_labels = [str(label) for label in labels]
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-
-    matrix_configs = (
-        ("Confusion Matrix (counts)", None, "d"),
-        ("Confusion Matrix (recall by true label)", "true", ".2f"),
+    num_classes = y_score.shape[1]
+    display_labels = [str(label) for label in range(num_classes)]
+    counts = build_confusion_matrix(y_true, y_pred, num_classes).astype(np.float64)
+    row_sums = counts.sum(axis=1, keepdims=True)
+    recall = np.divide(
+        counts,
+        row_sums,
+        out=np.zeros_like(counts),
+        where=row_sums != 0,
     )
-    for axis, (title, normalize, values_format) in zip(
-        axes, matrix_configs, strict=True
-    ):
-        ConfusionMatrixDisplay.from_predictions(
-            y_true,
-            y_pred,
-            labels=labels,
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    matrix_configs = (
+        ("Confusion Matrix (counts)", counts, "d"),
+        ("Confusion Matrix (recall by true label)", recall, ".2f"),
+    )
+    for axis, (title, matrix, values_format) in zip(axes, matrix_configs, strict=True):
+        _plot_confusion_matrix_on_axis(
+            axis,
+            matrix,
+            title=title,
             display_labels=display_labels,
-            normalize=normalize,
             values_format=values_format,
-            ax=axis,
         )
-        axis.set_title(title)
-        axis.set_xlabel("Predicted label")
-        axis.set_ylabel("True label")
 
     fig.tight_layout()
     if show:
