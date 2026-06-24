@@ -15,9 +15,19 @@ uv sync --group dev
 
 ## Run
 
+Poisson encoding demo:
+
 ```bash
 uv run python scripts/preprocess.py
 ```
+
+Train AdaLi on MNIST (JAX backend):
+
+```bash
+uv run python scripts/train.py --epochs 5 --fast
+```
+
+Outputs land in `outputs/` (`history.csv`, `run.json`, `class_summary.csv`). MNIST downloads to `data/mnist/` on first run.
 
 ## Test, format, and typecheck
 
@@ -31,21 +41,13 @@ uv run --group dev basedpyright
 
 ```
 src/spiking_neural_network/
-  config.py      PreprocessConfig and EncodingConfig
-  images.py      Load, resize, normalize images
-  encoding.py    Poisson spike encoding
-  plotting.py    Spike/rate visualization
-  validation.py  Relative error metric
+  encoding.py, images.py, lif.py, network.py   Spike encoding and LIF layers
+  datasets.py, data_module.py                  MNIST loading and batches
+  adali/                                       AdaLi model (JAX only)
+  pipeline.py                                  Training factories and public API
+  trainer.py, evaluation.py, training_logs.py  Train loop, metrics, exports
 
-scripts/preprocess.py   End-to-end demo
+scripts/preprocess.py   Encoding demo
+scripts/train.py        MNIST AdaLi training CLI
 tests/                  Pytest suite
 ```
-
-## Pipeline
-
-1. Load grayscale image
-2. Resize (default 32×32)
-3. Normalize pixel values to [0, 1]
-4. Sample Poisson spike counts over `t_steps`
-5. Compare expected vs observed never-spike pixel count
-6. Plot rates, raster, and population activity
