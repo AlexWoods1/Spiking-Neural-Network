@@ -83,3 +83,23 @@ def test_synaptic_drive_rejects_shape_mismatch() -> None:
 
     with pytest.raises(ValueError, match="neuron count must match"):
         synaptic_drive(spikes_in, weights)
+
+
+def test_synaptic_drive_rejects_invalid_spikes_ndim() -> None:
+    with pytest.raises(ValueError, match="spikes_in must have shape"):
+        synaptic_drive(np.ones(4), np.zeros((2, 2)))
+
+
+def test_synaptic_drive_rejects_invalid_weights_ndim() -> None:
+    with pytest.raises(ValueError, match="weights must have shape"):
+        synaptic_drive(np.zeros((4, 2)), np.ones(4))
+
+
+def test_unflatten_spikes_rejects_shape_mismatch() -> None:
+    with pytest.raises(ValueError, match="spikes must have shape"):
+        unflatten_spikes(np.zeros((5, 3)), (2, 2))
+
+
+def test_simulate_vector_timesteps_rejects_invalid_input() -> None:
+    with pytest.raises(ValueError, match="X must have shape"):
+        simulate_vector_timesteps(np.ones(4))

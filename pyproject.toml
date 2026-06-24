@@ -8,9 +8,12 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "jax>=0.10.2",
     "matplotlib>=3.11.0",
     "numpy>=2.4.0",
     "opencv-python>=4.13.0.92",
+    "optax>=0.2.8",
+    "tqdm>=4.68.3",
 ]
 
 [build-system]
@@ -27,6 +30,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "--cov=spiking_neural_network --cov-report=term-missing"
 
 [tool.coverage.run]
@@ -40,6 +44,7 @@ show_missing = true
 [tool.basedpyright]
 pythonVersion = "3.14"
 include = ["src/spiking_neural_network", "tests"]
+extraPaths = ["scripts"]
 typeCheckingMode = "standard"
 
 [tool.black]
