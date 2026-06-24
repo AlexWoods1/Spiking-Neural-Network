@@ -1,17 +1,19 @@
-"""Tests for the AdaLi model and NumPy training ops."""
+"""Tests for the AdaLi model and JAX training ops."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from spiking_neural_network.adali import numpy_ops
+pytest.importorskip("jax")
+
+from spiking_neural_network.adali import jax_ops
 from spiking_neural_network.adali.model import (
     AdaLi,
     SNN_BaseModel,
     SNNEpochTrainingState,
 )
-from spiking_neural_network.builder import ModelBuilder
+from spiking_neural_network.adali.weights import init_weights
 from spiking_neural_network.config import AdaLiConfig, SNN_Config
 from spiking_neural_network.exceptions import ParameterError
 from spiking_neural_network.schedules import (
@@ -23,66 +25,25 @@ from spiking_neural_network.schedules import (
 from tests.helpers import spike_batch
 
 
-class TestNumpyOps:
-    def test_forward_pass_logits_shape(self) -> None:
-        rng = np.random.default_rng(0)
-        weights = numpy_ops.init_weights(
-            input_dim=784,
-            hidden_dims=(8,),
-            output_dim=3,
-            weight_scale=0.2,
-            rng=rng,
-        )
-        sample = spike_batch(1, t_steps=5)[0]
-
-        cache = numpy_ops.forward_pass(
-            weights,
-            sample,
-            leak=float(np.exp(-0.5)),
-            v_th=1.0,
-            decay=0.9,
-        )
-
-        assert cache.logits.shape == (3,)
-        assert cache.timesteps == 5
-
-    def test_softmax_loss_returns_finite_gradient(self) -> None:
-        logits = np.array([0.1, 0.2, 0.3])
-        loss, d_out = numpy_ops.softmax_loss(logits, label=1)
-
-        assert np.isfinite(loss)
-        assert d_out.shape == (3,)
-        assert d_out.sum() == pytest.approx(0.0)
-
+class TestJaxOpsHelpers:
     def test_adali_surrogate_is_zero_outside_window(self) -> None:
-        u = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
-        slope = numpy_ops.adali_surrogate(
-            u,
-            v_minus=0.5,
-            v_plus=1.5,
-            v_th=1.0,
-            alpha=0.5,
-            beta=0.5,
+        import jax.numpy as jnp
+
+        u = jnp.array([0.0, 0.5, 1.0, 1.5, 2.0])
+        slope = np.asarray(
+            jax_ops.adali_surrogate(
+                u,
+                v_minus=0.5,
+                v_plus=1.5,
+                v_th=1.0,
+                alpha=0.5,
+                beta=0.5,
+            )
         )
 
         assert slope[0] == 0.0
         assert slope[-1] == 0.0
         assert np.all(slope[1:4] > 0.0)
-
-    def test_model_forward_matches_numpy_ops(self) -> None:
-        model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3))
-        sample = spike_batch(1, t_steps=5)[0]
-
-        model_cache = model.forward(sample)
-        ops_cache = numpy_ops.forward_pass(
-            model.weights,
-            sample,
-            leak=model.leak,
-            v_th=model.config.v_th,
-            decay=model.config.decay,
-        )
-
-        np.testing.assert_allclose(model_cache.logits, ops_cache.logits)
 
 
 class TestAdaLiModel:
@@ -92,7 +53,7 @@ class TestAdaLiModel:
 
         cache = model.forward(sample)
 
-        assert cache.logits.shape == (3,)
+        assert np.asarray(cache.logits).shape == (3,)
         assert cache.timesteps == 5
 
     def test_train_step_updates_weights(self) -> None:
@@ -148,8 +109,16 @@ class TestAdaLiModel:
         sample = spike_batch(1)[0]
         assert isinstance(model.predict(sample), int)
 
-    def test_model_builder_returns_adali_instance(self) -> None:
-        model = ModelBuilder.build("adali", AdaLiConfig())
+    def test_build_adali_model_returns_adali_instance(self) -> None:
+        from spiking_neural_network.pipeline import build_adali_model
+
+        model = build_adali_model(
+            hidden=8,
+            learning_rate=0.1,
+            lr_final=0.01,
+            weight_scale=0.2,
+            seed=1,
+        )
         assert isinstance(model, AdaLi)
 
     def test_train_batch_step_rejects_invalid_batch_rank(self) -> None:
@@ -192,42 +161,8 @@ class TestAdaLiModel:
         state = model.resolve_epoch(EpochContext(1, 3))
         assert isinstance(state, SNNEpochTrainingState)
 
-
-class TestAdaLiJaxBackend:
-    def test_forward_matches_numpy_backend(self) -> None:
-        config = AdaLiConfig(hidden_dims=(8,), output_dim=3)
-        numpy_model = AdaLi(config, backend="numpy")
-        jax_model = AdaLi(
-            config, weights=[w.copy() for w in numpy_model.weights], backend="jax"
-        )
-        sample = spike_batch(1, t_steps=5)[0]
-
-        np.testing.assert_allclose(
-            jax_model.forward(sample).logits,
-            numpy_model.forward(sample).logits,
-            rtol=1e-5,
-        )
-
-    def test_train_batch_step_updates_weights(self) -> None:
-        model = AdaLi(
-            AdaLiConfig(learning_rate=0.05, hidden_dims=(8,), output_dim=3),
-            backend="jax",
-        )
-        batch_x = spike_batch(4)
-        batch_y = np.array([1, 2, 0, 1], dtype=int)
-        import jax.numpy as jnp
-
-        before = tuple(np.asarray(weight) for weight in model._jax_weights())
-        state = model.resolve_epoch(EpochContext(1, 3))
-
-        loss = model.train_batch_step(batch_x, batch_y, state=state)
-
-        assert np.isfinite(loss)
-        after = tuple(np.asarray(weight) for weight in model._jax_weights())
-        assert not np.allclose(after[0], before[0])
-
     def test_predict_batch_matches_single_predictions(self) -> None:
-        model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3), backend="jax")
+        model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3))
         batch = spike_batch(4)
 
         batch_predictions = model.predict_batch(batch)
@@ -236,7 +171,7 @@ class TestAdaLiJaxBackend:
         np.testing.assert_array_equal(batch_predictions, single_predictions)
 
     def test_predict_proba_batch_matches_single_predictions(self) -> None:
-        model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3), backend="jax")
+        model = AdaLi(AdaLiConfig(hidden_dims=(8,), output_dim=3))
         batch = spike_batch(3)
 
         batch_probabilities = model.predict_proba_batch(batch)
@@ -246,34 +181,40 @@ class TestAdaLiJaxBackend:
 
         np.testing.assert_allclose(batch_probabilities, single_probabilities, rtol=1e-6)
 
-    def test_model_builder_passes_jax_backend(self) -> None:
-        model = ModelBuilder.build("adali", AdaLiConfig(), backend="jax")
-        assert isinstance(model, AdaLi)
-        assert model.backend == "jax"
+    def test_train_batch_step_syncs_numpy_weights(self) -> None:
+        model = AdaLi(
+            AdaLiConfig(learning_rate=0.05, hidden_dims=(8,), output_dim=3),
+        )
+        batch_x = spike_batch(4)
+        batch_y = np.array([1, 2, 0, 1], dtype=int)
+        before = [weights.copy() for weights in model.weights]
+        state = model.resolve_epoch(EpochContext(1, 3))
 
-    def test_jax_batch_step_rejects_non_adali_config(self) -> None:
+        loss = model.train_batch_step(batch_x, batch_y, state=state)
+
+        assert np.isfinite(loss)
+        assert not np.allclose(model.weights[0], before[0])
+
+    def test_train_batch_step_rejects_non_adali_config(self) -> None:
         class _GenericSnnModel(SNN_BaseModel):
-            def _surrogate(
-                self,
-                u: np.ndarray,
-                v_minus: float,
-                v_plus: float,
-            ) -> np.ndarray:
-                return np.zeros_like(u)
-
             def boundaries(self, ctx: EpochContext) -> BoundaryState:
                 return BoundaryState(v_minus=0.5, v_plus=1.5)
 
-        model = _GenericSnnModel(
-            SNN_Config(hidden_dims=(8,), output_dim=3), backend="jax"
-        )
+        model = _GenericSnnModel(SNN_Config(hidden_dims=(8,), output_dim=3))
         state = model.resolve_epoch(EpochContext(1, 1))
         batch_x = spike_batch(2)
 
-        with pytest.raises(TypeError, match="JAX backend requires AdaLiConfig"):
-            model._train_batch_step_jax(
-                batch_x,
-                np.array([0, 1], dtype=int),
-                state.boundary,
-                learning_rate=0.01,
-            )
+        with pytest.raises(TypeError, match="AdaLi training requires AdaLiConfig"):
+            model.train_batch_step(batch_x, np.array([0, 1]), state=state)
+
+    def test_init_weights_shape(self) -> None:
+        rng = np.random.default_rng(0)
+        weights = init_weights(
+            input_dim=784,
+            hidden_dims=(8,),
+            output_dim=3,
+            weight_scale=0.2,
+            rng=rng,
+        )
+        assert weights[0].shape == (8, 784)
+        assert weights[1].shape == (3, 8)

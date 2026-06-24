@@ -66,59 +66,6 @@ def adali_surrogate(
     return jnp.where((u < v_minus) | (u > v_plus), 0.0, slope)
 
 
-def forward_pass(
-    weights: tuple[jax.Array, ...],
-    input_data: jax.Array,
-    *,
-    leak: float,
-    v_th: float,
-    decay: float,
-) -> ForwardCache:
-    """Simulate layered LIF dynamics for one sample with shape ``(T, F)``."""
-    u_hist_list: list[jax.Array] = []
-    s_hist_list: list[jax.Array] = []
-    pre_synaptic = input_data
-
-    for layer_weights in weights:
-        n_neurons = layer_weights.shape[0]
-
-        def layer_step(
-            membrane: jax.Array,
-            pre_t: jax.Array,
-        ) -> tuple[jax.Array, tuple[jax.Array, jax.Array]]:
-            membrane_potential = leak * membrane + (1.0 - leak) * (
-                pre_t @ layer_weights.T
-            )
-            spikes = heaviside(membrane_potential, v_th)
-            membrane_new = membrane_potential - v_th * spikes
-            return membrane_new, (membrane_potential, spikes)
-
-        _, (u_layer, s_layer) = lax.scan(
-            layer_step,
-            jnp.zeros(n_neurons, dtype=input_data.dtype),
-            pre_synaptic,
-        )
-        u_hist_list.append(u_layer)
-        s_hist_list.append(s_layer)
-        pre_synaptic = s_layer
-
-    timesteps = input_data.shape[0]
-    temporal_weights = decay ** jnp.arange(
-        timesteps - 1,
-        -1,
-        -1,
-        dtype=input_data.dtype,
-    )
-    logits = v_th * (temporal_weights @ s_hist_list[-1]) / temporal_weights.sum()
-
-    return ForwardCache(
-        u_hist=tuple(u_hist_list),
-        pre_syn=(input_data, *tuple(s_hist_list[:-1])),
-        tw=temporal_weights,
-        logits=logits,
-    )
-
-
 def forward_pass_batched(
     weights: tuple[jax.Array, ...],
     input_data: jax.Array,
@@ -175,47 +122,43 @@ def forward_pass_batched(
     )
 
 
-def softmax_loss(logits: jax.Array, label: jax.Array) -> tuple[jax.Array, jax.Array]:
-    """Return softmax cross-entropy loss and output gradient."""
-    losses, grads = jax_losses.loss_and_grad(
-        logits[None, :],
-        jnp.asarray([label], dtype=jnp.int32),
-        loss="softmax",
+def _squeeze_forward_cache(cache: ForwardCache) -> ForwardCache:
+    """Remove a singleton batch dimension from a batched forward cache."""
+    return ForwardCache(
+        u_hist=tuple(jnp.squeeze(layer, axis=1) for layer in cache.u_hist),
+        pre_syn=tuple(jnp.squeeze(pre, axis=1) for pre in cache.pre_syn),
+        tw=cache.tw,
+        logits=cache.logits[0],
     )
-    return losses[0], grads[0]
 
 
-def focal_loss(
-    logits: jax.Array,
-    label: jax.Array,
-    *,
-    gamma: float = 2.0,
-    alpha: float | None = None,
-) -> tuple[jax.Array, jax.Array]:
-    """Return focal loss and output gradient for one sample."""
-    losses, grads = jax_losses.focal_loss_and_grad(
-        logits[None, :],
-        jnp.asarray([label], dtype=jnp.int32),
-        focal_gamma=gamma,
-        focal_alpha=alpha,
+def _expand_forward_cache(cache: ForwardCache) -> ForwardCache:
+    """Add a singleton batch dimension for batched backward ops."""
+    return ForwardCache(
+        u_hist=tuple(u[:, None, :] for u in cache.u_hist),
+        pre_syn=tuple(pre[:, None, :] for pre in cache.pre_syn),
+        tw=cache.tw,
+        logits=cache.logits[None, :],
     )
-    return losses[0], grads[0]
 
 
-def output_spike_gradients(
+def forward_pass(
     weights: tuple[jax.Array, ...],
-    cache: ForwardCache,
-    d_out: jax.Array,
+    input_data: jax.Array,
     *,
+    leak: float,
     v_th: float,
-) -> tuple[jax.Array, ...]:
-    """Seed output-layer spike gradients from decay-weighted logits."""
-    timesteps = cache.timesteps
-    d_spikes = tuple(
-        jnp.zeros((timesteps, layer.shape[0]), dtype=d_out.dtype) for layer in weights
+    decay: float,
+) -> ForwardCache:
+    """Simulate layered LIF dynamics for one sample with shape ``(T, F)``."""
+    batched = forward_pass_batched(
+        weights,
+        input_data[None, ...],
+        leak=leak,
+        v_th=v_th,
+        decay=decay,
     )
-    output_grad = jnp.outer(cache.tw, d_out) * (v_th / cache.tw.sum())
-    return (*d_spikes[:-1], output_grad)
+    return _squeeze_forward_cache(batched)
 
 
 def output_spike_gradients_batched(
@@ -237,66 +180,21 @@ def output_spike_gradients_batched(
     return (*d_spikes[:-1], output_grad)
 
 
-def backward_pass(
+def output_spike_gradients(
     weights: tuple[jax.Array, ...],
-    d_spikes: tuple[jax.Array, ...],
     cache: ForwardCache,
+    d_out: jax.Array,
     *,
-    v_minus: float,
-    v_plus: float,
-    leak: float,
     v_th: float,
-    alpha: float,
-    beta: float,
 ) -> tuple[jax.Array, ...]:
-    """Backpropagate through time with a surrogate spike gradient."""
-    d_spikes_list = list(d_spikes)
-    d_weights_list: list[jax.Array] = []
-
-    for layer in range(len(weights) - 1, -1, -1):
-        n_out = weights[layer].shape[0]
-        u_rev = jnp.flip(cache.u_hist[layer], axis=0)
-        pre_rev = jnp.flip(cache.pre_syn[layer], axis=0)
-        ds_rev = jnp.flip(d_spikes_list[layer], axis=0)
-
-        def rev_step(
-            carry: tuple[jax.Array, jax.Array],
-            inputs: tuple[jax.Array, jax.Array, jax.Array],
-        ) -> tuple[tuple[jax.Array, jax.Array], jax.Array]:
-            d_u_next, d_w_acc = carry
-            u_t, pre_t, ds_t = inputs
-            d_u = (
-                ds_t
-                * adali_surrogate(
-                    u_t,
-                    v_minus,
-                    v_plus,
-                    v_th=v_th,
-                    alpha=alpha,
-                    beta=beta,
-                )
-                + leak * d_u_next
-            )
-            d_w_acc = d_w_acc + jnp.outer(d_u, pre_t)
-            return (d_u, d_w_acc), d_u
-
-        (_, d_w_total), d_u_hist_rev = lax.scan(
-            rev_step,
-            (
-                jnp.zeros(n_out, dtype=cache.logits.dtype),
-                jnp.zeros_like(weights[layer]),
-            ),
-            (u_rev, pre_rev, ds_rev),
-        )
-        d_weights_list.insert(0, d_w_total)
-
-        if layer > 0:
-            d_u_hist = jnp.flip(d_u_hist_rev, axis=0)
-            d_spikes_list[layer - 1] = (
-                d_spikes_list[layer - 1] + d_u_hist @ weights[layer]
-            )
-
-    return tuple(d_weights_list)
+    """Seed output-layer spike gradients from decay-weighted logits."""
+    batched = output_spike_gradients_batched(
+        weights,
+        _expand_forward_cache(cache),
+        d_out[None, :],
+        v_th=v_th,
+    )
+    return tuple(jnp.squeeze(grad, axis=1) for grad in batched)
 
 
 def backward_pass_batched(
@@ -360,6 +258,33 @@ def backward_pass_batched(
             )
 
     return tuple(d_weights_list)
+
+
+def backward_pass(
+    weights: tuple[jax.Array, ...],
+    d_spikes: tuple[jax.Array, ...],
+    cache: ForwardCache,
+    *,
+    v_minus: float,
+    v_plus: float,
+    leak: float,
+    v_th: float,
+    alpha: float,
+    beta: float,
+) -> tuple[jax.Array, ...]:
+    """Backpropagate through time with a surrogate spike gradient."""
+    batched_d_spikes = tuple(ds[:, None, :] for ds in d_spikes)
+    return backward_pass_batched(
+        weights,
+        batched_d_spikes,
+        _expand_forward_cache(cache),
+        v_minus=v_minus,
+        v_plus=v_plus,
+        leak=leak,
+        v_th=v_th,
+        alpha=alpha,
+        beta=beta,
+    )
 
 
 def update_weights(

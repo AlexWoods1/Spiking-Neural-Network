@@ -1,4 +1,4 @@
-"""Preview MNIST spike batches from the builder ``DataModule``."""
+"""Preview MNIST spike batches from the pipeline ``DataModule``."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-from spiking_neural_network.builder import (
+from spiking_neural_network.pipeline import (
     DataModule,
     DataModuleConfig,
     MNISTDataConfig,

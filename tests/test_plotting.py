@@ -259,8 +259,7 @@ def test_plot_run_report_writes_png(tmp_path: Path) -> None:
     "epochs": 2,
     "t_steps": 8,
     "hidden": 128,
-    "learning_rate": 0.25,
-    "backend": "jax"
+    "learning_rate": 0.25
   },
   "history": [
     {"epoch": 1, "train_loss": 1.8, "learning_rate": 0.25},

@@ -8,12 +8,6 @@ from pathlib import Path
 
 import numpy as np
 
-from spiking_neural_network.builder import (
-    ENCODING_SEED_TEST_OFFSET,
-    Trainer,
-    TrainingConfig,
-    derived_seed,
-)
 from spiking_neural_network.datasets import load_mnist
 from spiking_neural_network.evaluation import (
     classify_image,
@@ -21,9 +15,12 @@ from spiking_neural_network.evaluation import (
     print_prediction_summary,
 )
 from spiking_neural_network.pipeline import (
+    ENCODING_SEED_TEST_OFFSET,
+    Trainer,
+    TrainingConfig,
     build_adali_model,
     build_mnist_data_module,
-    default_split_limits,
+    derived_seed,
 )
 from spiking_neural_network.plotting import (
     plot_classified_image,
@@ -39,7 +36,6 @@ DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs"
 
 
 def build_parser() -> argparse.ArgumentParser:
-    train_size, val_size, test_size = default_split_limits()
     parser = argparse.ArgumentParser(description="Train AdaLi on MNIST.")
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
     parser.add_argument("--epochs", type=int, default=5)
@@ -70,19 +66,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--train-limit",
         type=int,
-        default=train_size,
+        default=None,
         help="Cap training samples (default: all official MNIST train holdout)",
     )
     parser.add_argument(
         "--val-limit",
         type=int,
-        default=val_size,
+        default=None,
         help="Cap validation samples (default: all official MNIST val holdout)",
     )
     parser.add_argument(
         "--test-limit",
         type=int,
-        default=test_size,
+        default=None,
         help="Cap test samples (default: all official MNIST test split)",
     )
     parser.add_argument("--no-plot", action="store_true", help="Skip matplotlib plots")
@@ -91,12 +87,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=0,
         help="Number of test images to show with classifications (0 to skip)",
-    )
-    parser.add_argument(
-        "--backend",
-        choices=["numpy", "jax"],
-        default="jax",
-        help="Training backend: jax (batched, fast) or numpy (reference)",
     )
     parser.add_argument(
         "--eval-val-every",
@@ -203,7 +193,6 @@ def _run_config(args: argparse.Namespace) -> dict[str, object]:
         "train_limit": args.train_limit,
         "val_limit": args.val_limit,
         "test_limit": args.test_limit,
-        "backend": args.backend,
         "eval_val_every": args.eval_val_every,
         "eval_test_every": args.eval_test_every,
         "fast": args.fast,
@@ -267,7 +256,6 @@ def main() -> None:
         focal_gamma=args.focal_gamma,
         focal_alpha=args.focal_alpha,
         seed=args.seed,
-        backend=args.backend,
     )
     trainer = Trainer(
         model,

@@ -411,7 +411,6 @@ def _format_run_config_summary(config: dict[str, object]) -> str:
         "lr_final",
         "weight_scale",
         "batch_size",
-        "backend",
         "seed",
         "fast",
     )
@@ -538,7 +537,6 @@ def plot_run_report(
     title_bits = [
         f"hidden={config.get('hidden')}",
         f"t_steps={config.get('t_steps')}",
-        f"backend={config.get('backend')}",
     ]
     if val_epochs:
         title_bits.append(f"val_acc={val_accs[-1]:.1%}")

@@ -75,8 +75,6 @@ class TestTrainingConfigs:
             ({"seed": 0}, "seed must be positive"),
             ({"input_dim": 0}, "input_dim must be positive"),
             ({"output_dim": 0}, "output_dim must be positive"),
-            ({"test_size": 0.0}, "test_size must be between 0 and 1"),
-            ({"test_size": 1.0}, "test_size must be between 0 and 1"),
             ({"learning_rate": 0.0}, "learning_rate must be positive"),
             ({"dt": 0.0}, "dt must be positive"),
             ({"tau": 0.0}, "tau must be positive"),
@@ -131,8 +129,6 @@ class TestTrainingConfigs:
             BaseModelConfig(model_name="x", input_dim=1.5, output_dim=1)  # type: ignore[arg-type]
         with pytest.raises(ParameterError, match="output_dim must be an integer"):
             BaseModelConfig(model_name="x", input_dim=1, output_dim=1.5)  # type: ignore[arg-type]
-        with pytest.raises(ParameterError, match="test_size must be a float"):
-            BaseModelConfig(model_name="x", input_dim=1, output_dim=1, test_size=1)  # type: ignore[arg-type]
         with pytest.raises(ParameterError, match="seed must be an integer"):
             BaseModelConfig(model_name="x", input_dim=1, output_dim=1, seed=1.5)  # type: ignore[arg-type]
 
@@ -174,7 +170,6 @@ class TestTrainingConfigs:
             ("tau", 2.0),
             ("v_th", 1.0),
             ("decay", 0.9),
-            ("test_size", 0.2),
             ("seed", 42),
             ("learning_rate", 0.01),
         ):

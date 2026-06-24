@@ -75,8 +75,8 @@ class TestTrainer:
         assert "train_loss" in history[0]
         assert "val_acc" in history[0]
 
-    def test_fit_runs_with_jax_backend(self) -> None:
-        model = AdaLi(AdaLiConfig(learning_rate=0.05), backend="jax")
+    def test_fit_runs_with_jax_model(self) -> None:
+        model = AdaLi(AdaLiConfig(learning_rate=0.05))
         module = DataModule(DataModuleConfig(batch_size=4))
         module.train = array_source(8)
         module.val = array_source(4)
