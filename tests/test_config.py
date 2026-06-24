@@ -59,6 +59,10 @@ def test_lif_config_rejects_invalid_values() -> None:
         LIFConfig(threshold=0)
     with pytest.raises(ValueError, match="input_weight must be positive"):
         LIFConfig(input_weight=0)
+    with pytest.raises(ValueError, match="dt must be positive"):
+        LIFConfig(dt=0)
+    with pytest.raises(ValueError, match="R must be positive"):
+        LIFConfig(R=0)
     with pytest.raises(ValueError, match="C must be positive"):
         LIFConfig(C=0)
 

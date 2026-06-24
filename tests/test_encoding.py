@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from spiking_neural_network.encoding import EncodingError, SpikeEncoding
+from spiking_neural_network.encoding import EncodingError, SpikeEncoding, _poisson_samples
 
 
 def test_from_rates_output_shapes() -> None:
@@ -122,3 +122,20 @@ def test_from_samples_builds_encoding() -> None:
 
     assert encoding.samples.shape == (5, 2, 2)
     assert encoding.first_spikes[0, 0] == 1
+
+
+def test_from_samples_rejects_invalid_sample_shape() -> None:
+    rates = np.full((2, 2), 0.5)
+
+    with pytest.raises(EncodingError, match="Samples must have shape"):
+        SpikeEncoding.from_samples(rates=rates, samples=np.zeros((5, 2)))
+
+    with pytest.raises(EncodingError, match="Sample spatial shape"):
+        SpikeEncoding.from_samples(rates=rates, samples=np.zeros((5, 2, 3)))
+
+
+def test_poisson_samples_without_rng_still_produces_samples() -> None:
+    rates = np.full((2, 2), 0.5)
+    samples = _poisson_samples(rates, t=3, rng=None)
+
+    assert samples.shape == (3, 2, 2)
