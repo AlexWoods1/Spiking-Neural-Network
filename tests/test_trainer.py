@@ -17,7 +17,9 @@ class _StubModel(BaseModel):
     """Minimal concrete model for ``BaseModel`` API coverage."""
 
     def __init__(self) -> None:
-        super().__init__(BaseModelConfig(model_name="stub", input_dim=784, output_dim=3))
+        super().__init__(
+            BaseModelConfig(model_name="stub", input_dim=784, output_dim=3)
+        )
 
     def predict(self, data: np.ndarray) -> int:
         return 0
@@ -107,7 +109,9 @@ class TestTrainer:
         module.test = array_source(4)
         trainer = Trainer(model, TrainingConfig(train_name="smoke", total_epochs=3))
 
-        history, _final_accuracies = trainer.fit(module, eval_val_every=3, eval_test_every=0)
+        history, _final_accuracies = trainer.fit(
+            module, eval_val_every=3, eval_test_every=0
+        )
 
         assert "val_acc" not in history[0]
         assert "val_acc" not in history[1]
@@ -163,7 +167,9 @@ class TestTrainer:
         assert len(samples) == 3
         assert samples[0].shape == batch[0].shape
 
-    def test_fit_prints_final_split_accuracies(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_fit_prints_final_split_accuracies(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         model = AdaLi(AdaLiConfig(learning_rate=0.05))
         module = DataModule(DataModuleConfig(batch_size=4))
         module.train = array_source(8)
@@ -199,6 +205,8 @@ class TestTrainer:
         module.test = array_source(4)
         trainer = Trainer(model, TrainingConfig(train_name="smoke", total_epochs=1))
 
-        history, _final_accuracies = trainer.fit(module, show_progress=True, eval_val_every=999)
+        history, _final_accuracies = trainer.fit(
+            module, show_progress=True, eval_val_every=999
+        )
 
         assert len(history) == 1

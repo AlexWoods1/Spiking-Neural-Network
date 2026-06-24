@@ -19,7 +19,13 @@ from spiking_neural_network.training_logs import (
 def test_save_history_csv_writes_expected_columns(tmp_path: Path) -> None:
     history = [
         {"epoch": 1, "train_loss": 1.9, "learning_rate": 0.25, "val_acc": 0.647},
-        {"epoch": 2, "train_loss": 1.7, "learning_rate": 0.21, "val_acc": 0.69, "test_acc": 0.68},
+        {
+            "epoch": 2,
+            "train_loss": 1.7,
+            "learning_rate": 0.21,
+            "val_acc": 0.69,
+            "test_acc": 0.68,
+        },
     ]
     path = tmp_path / "history.csv"
     save_history_csv(history, path)

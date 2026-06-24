@@ -86,7 +86,9 @@ def _validate_learning_rate(learning_rate: float | LearningRateSchedule) -> None
         if not isinstance(probe, (int, float)) or probe <= 0:
             raise ParameterError("learning_rate schedule must return a positive number")
         return
-    raise ParameterError("learning_rate must be a positive number or callable(ctx: EpochContext)")
+    raise ParameterError(
+        "learning_rate must be a positive number or callable(ctx: EpochContext)"
+    )
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 
-from spiking_neural_network.encoding import EncodingError, SpikeEncoding, _poisson_samples
+from spiking_neural_network.encoding import (
+    EncodingError,
+    SpikeEncoding,
+    _poisson_samples,
+)
 
 
 def test_from_rates_output_shapes() -> None:

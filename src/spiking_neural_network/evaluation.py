@@ -81,10 +81,10 @@ def build_confusion_matrix(
     num_classes: int,
 ) -> np.ndarray:
     """Return a ``(num_classes, num_classes)`` confusion matrix with fixed label order."""
-    from sklearn.metrics import confusion_matrix
-
-    labels = list(range(num_classes))
-    return confusion_matrix(y_true, y_pred, labels=labels)
+    matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
+    for true_label, pred_label in zip(y_true, y_pred, strict=True):
+        matrix[int(true_label), int(pred_label)] += 1
+    return matrix
 
 
 def print_prediction_summary(

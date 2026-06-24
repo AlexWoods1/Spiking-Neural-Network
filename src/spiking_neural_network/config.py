@@ -10,6 +10,7 @@ from spiking_neural_network.schedules import (
     _validate_learning_rate,
 )
 
+
 @dataclass(frozen=True)
 class EncodingConfig:
     """Configuration for Poisson spike encoding."""
@@ -25,7 +26,9 @@ class EncodingConfig:
         """Return a NumPy random generator seeded from config."""
         return np.random.default_rng(self.seed)
 
+
 ### for LIF Model.
+
 
 @dataclass(frozen=True)
 class LIFConfig:
@@ -129,10 +132,10 @@ class NetworkConfig:
         )
 
 
-
 @dataclass(frozen=True)
 class TrainingConfig:
     """Training schedule configuration."""
+
     train_name: str
     total_epochs: int
 
@@ -272,4 +275,3 @@ class AdaLiConfig(SNN_Config):
             raise ParameterError("focal_gamma must be non-negative")
         if self.focal_alpha is not None and not (0.0 < self.focal_alpha <= 1.0):
             raise ParameterError("focal_alpha must be in (0, 1] when set")
-

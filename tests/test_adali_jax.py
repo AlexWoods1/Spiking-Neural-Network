@@ -293,12 +293,18 @@ class TestJaxOps:
             )
             single_grads.append(grads)
         mean_single_grads = tuple(
-            jnp.mean(jnp.stack([grad[layer_index] for grad in single_grads], axis=0), axis=0)
+            jnp.mean(
+                jnp.stack([grad[layer_index] for grad in single_grads], axis=0), axis=0
+            )
             for layer_index in range(len(weights))
         )
 
-        for batched_grad, mean_single_grad in zip(batched_grads, mean_single_grads, strict=True):
-            np.testing.assert_allclose(np.asarray(batched_grad), np.asarray(mean_single_grad), rtol=1e-5)
+        for batched_grad, mean_single_grad in zip(
+            batched_grads, mean_single_grads, strict=True
+        ):
+            np.testing.assert_allclose(
+                np.asarray(batched_grad), np.asarray(mean_single_grad), rtol=1e-5
+            )
 
 
 def test_jax_ops_import_error_when_jax_missing() -> None:
@@ -313,7 +319,9 @@ def test_jax_ops_import_error_when_jax_missing() -> None:
 
     try:
         with patch("builtins.__import__", side_effect=fake_import):
-            with pytest.raises(ImportError, match="Install jax and optax to use the JAX backend"):
+            with pytest.raises(
+                ImportError, match="Install jax and optax to use the JAX backend"
+            ):
                 importlib.import_module(module_name)
     finally:
         if saved_module is not None:

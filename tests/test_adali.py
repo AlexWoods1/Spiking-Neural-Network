@@ -6,11 +6,20 @@ import numpy as np
 import pytest
 
 from spiking_neural_network.adali import numpy_ops
-from spiking_neural_network.adali.model import AdaLi, SNN_BaseModel, SNNEpochTrainingState
+from spiking_neural_network.adali.model import (
+    AdaLi,
+    SNN_BaseModel,
+    SNNEpochTrainingState,
+)
 from spiking_neural_network.builder import ModelBuilder
 from spiking_neural_network.config import AdaLiConfig, SNN_Config
 from spiking_neural_network.exceptions import ParameterError
-from spiking_neural_network.schedules import BoundaryState, EpochContext, EpochTrainingState, linear_learning_rate
+from spiking_neural_network.schedules import (
+    BoundaryState,
+    EpochContext,
+    EpochTrainingState,
+    linear_learning_rate,
+)
 from tests.helpers import spike_batch
 
 
@@ -153,7 +162,9 @@ class TestAdaLiModel:
         model = AdaLi(AdaLiConfig())
         state = model.resolve_epoch(EpochContext(1, 1))
         with pytest.raises(ValueError, match="at least one sample"):
-            model.train_batch_step(np.zeros((0, 4, 784)), np.array([], dtype=int), state=state)
+            model.train_batch_step(
+                np.zeros((0, 4, 784)), np.array([], dtype=int), state=state
+            )
 
     def test_train_batch_step_rejects_non_snn_state(self) -> None:
         model = AdaLi(AdaLiConfig())
@@ -186,7 +197,9 @@ class TestAdaLiJaxBackend:
     def test_forward_matches_numpy_backend(self) -> None:
         config = AdaLiConfig(hidden_dims=(8,), output_dim=3)
         numpy_model = AdaLi(config, backend="numpy")
-        jax_model = AdaLi(config, weights=[w.copy() for w in numpy_model.weights], backend="jax")
+        jax_model = AdaLi(
+            config, weights=[w.copy() for w in numpy_model.weights], backend="jax"
+        )
         sample = spike_batch(1, t_steps=5)[0]
 
         np.testing.assert_allclose(
@@ -196,7 +209,10 @@ class TestAdaLiJaxBackend:
         )
 
     def test_train_batch_step_updates_weights(self) -> None:
-        model = AdaLi(AdaLiConfig(learning_rate=0.05, hidden_dims=(8,), output_dim=3), backend="jax")
+        model = AdaLi(
+            AdaLiConfig(learning_rate=0.05, hidden_dims=(8,), output_dim=3),
+            backend="jax",
+        )
         batch_x = spike_batch(4)
         batch_y = np.array([1, 2, 0, 1], dtype=int)
         import jax.numpy as jnp
@@ -224,7 +240,9 @@ class TestAdaLiJaxBackend:
         batch = spike_batch(3)
 
         batch_probabilities = model.predict_proba_batch(batch)
-        single_probabilities = np.stack([model.predict_proba(sample) for sample in batch])
+        single_probabilities = np.stack(
+            [model.predict_proba(sample) for sample in batch]
+        )
 
         np.testing.assert_allclose(batch_probabilities, single_probabilities, rtol=1e-6)
 
@@ -245,7 +263,9 @@ class TestAdaLiJaxBackend:
             def boundaries(self, ctx: EpochContext) -> BoundaryState:
                 return BoundaryState(v_minus=0.5, v_plus=1.5)
 
-        model = _GenericSnnModel(SNN_Config(hidden_dims=(8,), output_dim=3), backend="jax")
+        model = _GenericSnnModel(
+            SNN_Config(hidden_dims=(8,), output_dim=3), backend="jax"
+        )
         state = model.resolve_epoch(EpochContext(1, 1))
         batch_x = spike_batch(2)
 

@@ -8,7 +8,12 @@ from pathlib import Path
 
 import numpy as np
 
-from spiking_neural_network.builder import ENCODING_SEED_TEST_OFFSET, Trainer, TrainingConfig, derived_seed
+from spiking_neural_network.builder import (
+    ENCODING_SEED_TEST_OFFSET,
+    Trainer,
+    TrainingConfig,
+    derived_seed,
+)
 from spiking_neural_network.datasets import load_mnist
 from spiking_neural_network.evaluation import (
     classify_image,
@@ -140,7 +145,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _limited_test_images(data_dir: Path, limit: int | None) -> tuple[np.ndarray, np.ndarray]:
+def _limited_test_images(
+    data_dir: Path, limit: int | None
+) -> tuple[np.ndarray, np.ndarray]:
     images, labels = load_mnist(data_dir, train=False)
     if limit is not None:
         images = images[:limit]
@@ -148,11 +155,15 @@ def _limited_test_images(data_dir: Path, limit: int | None) -> tuple[np.ndarray,
     return images, labels
 
 
-def _plot_classification_previews(args: argparse.Namespace, model, test_images, test_labels) -> None:
+def _plot_classification_previews(
+    args: argparse.Namespace, model, test_images, test_labels
+) -> None:
     if args.preview_count <= 0 or test_images.shape[0] == 0:
         return
 
-    preview_rng = np.random.default_rng(derived_seed(args.seed, ENCODING_SEED_TEST_OFFSET))
+    preview_rng = np.random.default_rng(
+        derived_seed(args.seed, ENCODING_SEED_TEST_OFFSET)
+    )
     predicted, probabilities = classify_image(
         model,
         test_images[0],

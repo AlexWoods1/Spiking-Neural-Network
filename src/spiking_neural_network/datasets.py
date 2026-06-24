@@ -112,10 +112,15 @@ def split_official_train_val(
     """
     count = images.shape[0]
     if val_size >= count:
-        raise DatasetError(f"val_size {val_size} must be smaller than train count {count}")
+        raise DatasetError(
+            f"val_size {val_size} must be smaller than train count {count}"
+        )
 
     val_start = count - val_size
-    return (images[:val_start], labels[:val_start]), (images[val_start:], labels[val_start:])
+    return (images[:val_start], labels[:val_start]), (
+        images[val_start:],
+        labels[val_start:],
+    )
 
 
 def _split_indices(
@@ -125,7 +130,9 @@ def _split_indices(
     val_size: int,
 ) -> np.ndarray:
     if val_size >= count:
-        raise DatasetError(f"val_size {val_size} must be smaller than train count {count}")
+        raise DatasetError(
+            f"val_size {val_size} must be smaller than train count {count}"
+        )
 
     val_start = count - val_size
     if split is Split.TRAIN:
@@ -224,7 +231,9 @@ def iter_mnist_samples(
     )
     rng = np.random.default_rng(config.seed)
     for index in indices:
-        yield encode_image_spikes(images[int(index)], config.t_steps, rng), int(labels[int(index)])
+        yield encode_image_spikes(images[int(index)], config.t_steps, rng), int(
+            labels[int(index)]
+        )
 
 
 def iter_mnist_batches(

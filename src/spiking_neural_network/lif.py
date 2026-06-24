@@ -9,8 +9,6 @@ import numpy as np
 from spiking_neural_network.config import LIFConfig
 
 
-
-
 def heaviside(U: np.ndarray, threshold: float) -> np.ndarray:
     """Return 1 where membrane potential is at or above threshold."""
     return np.where(U < threshold, 0, 1)
@@ -141,5 +139,3 @@ def simulate_timesteps(
     membrane = unflatten_spikes(flat_membrane, spatial_shape)
     spikes = unflatten_spikes(flat_spikes, spatial_shape)
     return membrane, spikes
-
-

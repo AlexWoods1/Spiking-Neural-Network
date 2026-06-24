@@ -112,7 +112,7 @@ class ModelBuilder:
         config: SNN_Config,
         *,
         rng: np.random.Generator | None = None,
-        backend: Literal["numpy", "jax"] = "jax",
+        backend: Literal["numpy", "jax"] = "numpy",
     ) -> BaseModel:
         if name.lower() == "adali":
             if not isinstance(config, AdaLiConfig):

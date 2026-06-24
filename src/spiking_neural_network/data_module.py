@@ -182,14 +182,22 @@ class MNISTDataProvider(DataProvider):
         (train_images, train_labels), (test_images, test_labels) = load_mnist_bundle(
             self.config.data_dir
         )
-        (train_images, train_labels), (val_images, val_labels) = split_official_train_val(
-            train_images,
-            train_labels,
-            val_size=self.config.val_size,
+        (train_images, train_labels), (val_images, val_labels) = (
+            split_official_train_val(
+                train_images,
+                train_labels,
+                val_size=self.config.val_size,
+            )
         )
-        train_indices = self._limit_indices(np.arange(train_images.shape[0]), self.config.train_limit)
-        val_indices = self._limit_indices(np.arange(val_images.shape[0]), self.config.val_limit)
-        test_indices = self._limit_indices(np.arange(test_images.shape[0]), self.config.test_limit)
+        train_indices = self._limit_indices(
+            np.arange(train_images.shape[0]), self.config.train_limit
+        )
+        val_indices = self._limit_indices(
+            np.arange(val_images.shape[0]), self.config.val_limit
+        )
+        test_indices = self._limit_indices(
+            np.arange(test_images.shape[0]), self.config.test_limit
+        )
         train_rng = np.random.default_rng(
             derived_seed(self.config.seed, ENCODING_SEED_TRAIN_OFFSET)
         )
@@ -230,7 +238,9 @@ class MNISTDataProvider(DataProvider):
         if self.config.preencode is False:
             return False
         if self.config.preencode is True and not within_budget:
-            needed_gib = estimate_preencode_bytes(num_samples, self.config.t_steps) / (1024**3)
+            needed_gib = estimate_preencode_bytes(num_samples, self.config.t_steps) / (
+                1024**3
+            )
             budget_gib = self.config.preencode_max_bytes / (1024**3)
             warnings.warn(
                 "Bulk pre-encoding would need "

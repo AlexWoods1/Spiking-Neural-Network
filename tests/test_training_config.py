@@ -25,7 +25,9 @@ from spiking_neural_network.schedules import (
 
 class TestTrainingConfigs:
     def test_adali_config_rejects_invalid_boundary_order(self) -> None:
-        with pytest.raises(ParameterError, match="left_initial must be less than right_initial"):
+        with pytest.raises(
+            ParameterError, match="left_initial must be less than right_initial"
+        ):
             AdaLiConfig(left_initial=2.0, right_initial=1.0)
 
     def test_training_config_rejects_zero_epochs(self) -> None:
@@ -62,7 +64,9 @@ class TestTrainingConfigs:
         def bad_schedule(ctx: EpochContext) -> float:
             return 0.0
 
-        with pytest.raises(ParameterError, match="learning_rate schedule must return a positive number"):
+        with pytest.raises(
+            ParameterError, match="learning_rate schedule must return a positive number"
+        ):
             SNN_Config(learning_rate=bad_schedule)
 
     @pytest.mark.parametrize(
@@ -96,12 +100,23 @@ class TestTrainingConfigs:
             ({"p": 1.0}, "p must be between 0 and 1"),
             ({"left_initial": 0.0}, "left_initial must be positive"),
             ({"right_initial": 0.0}, "right_initial must be positive"),
-            ({"left_initial": 1.5, "right_initial": 1.0}, "left_initial must be less than right_initial"),
-            ({"left_initial": 1.5, "right_initial": 2.0, "v_th": 1.0}, "left_initial must be less than v_th"),
-            ({"left_initial": 0.3, "right_initial": 0.8, "v_th": 1.0}, "right_initial must be greater than v_th"),
+            (
+                {"left_initial": 1.5, "right_initial": 1.0},
+                "left_initial must be less than right_initial",
+            ),
+            (
+                {"left_initial": 1.5, "right_initial": 2.0, "v_th": 1.0},
+                "left_initial must be less than v_th",
+            ),
+            (
+                {"left_initial": 0.3, "right_initial": 0.8, "v_th": 1.0},
+                "right_initial must be greater than v_th",
+            ),
         ],
     )
-    def test_adali_config_rejects_invalid_values(self, kwargs: dict, match: str) -> None:
+    def test_adali_config_rejects_invalid_values(
+        self, kwargs: dict, match: str
+    ) -> None:
         with pytest.raises(ParameterError, match=match):
             AdaLiConfig(**kwargs)
 
@@ -128,7 +143,9 @@ class TestTrainingConfigs:
             SNN_Config(output_dim=0)
 
     def test_snn_config_rejects_invalid_learning_rate_type(self) -> None:
-        with pytest.raises(ParameterError, match="learning_rate must be a positive number or callable"):
+        with pytest.raises(
+            ParameterError, match="learning_rate must be a positive number or callable"
+        ):
             SNN_Config(learning_rate="bad")  # type: ignore[arg-type]
 
     def test_adali_config_rejects_invalid_v_th(self) -> None:
@@ -143,7 +160,9 @@ class TestTrainingConfigs:
         with pytest.raises(ParameterError, match="model_name must be provided"):
             BaseModelConfig(model_name=None, input_dim=1, output_dim=1)  # type: ignore[arg-type]
 
-    def test_snn_config_post_init_validates_dims_when_base_checks_bypassed(self) -> None:
+    def test_snn_config_post_init_validates_dims_when_base_checks_bypassed(
+        self,
+    ) -> None:
         config = SNN_Config.__new__(SNN_Config)
         for name, value in (
             ("model_name", "SNN"),

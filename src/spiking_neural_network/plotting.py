@@ -265,7 +265,9 @@ def plot_classified_sample_grid(
         true_label = int(labels[index])
         outcome = "ok" if predicted == true_label else "miss"
         confidence = float(probabilities[predicted])
-        axis.set_title(f"true {true_label} -> {predicted} ({confidence:.0%}, {outcome})")
+        axis.set_title(
+            f"true {true_label} -> {predicted} ({confidence:.0%}, {outcome})"
+        )
         axis.axis("off")
 
     for axis in axes_flat[sample_count:]:
@@ -300,7 +302,9 @@ def plot_evaluation_figures(
         ("Confusion Matrix (counts)", None, "d"),
         ("Confusion Matrix (recall by true label)", "true", ".2f"),
     )
-    for axis, (title, normalize, values_format) in zip(axes, matrix_configs, strict=True):
+    for axis, (title, normalize, values_format) in zip(
+        axes, matrix_configs, strict=True
+    ):
         ConfusionMatrixDisplay.from_predictions(
             y_true,
             y_pred,
@@ -432,7 +436,9 @@ def plot_run_report(
     accuracy_ax = fig.add_subplot(grid[0, 1])
     split_names = list(final_accuracies.keys())
     split_values = [float(final_accuracies[name]) for name in split_names]
-    bars = accuracy_ax.bar(split_names, split_values, color=["#4c78a8", "#72b7b2", "#f58518"])
+    bars = accuracy_ax.bar(
+        split_names, split_values, color=["#4c78a8", "#72b7b2", "#f58518"]
+    )
     accuracy_ax.set_ylim(0.0, 1.0)
     accuracy_ax.set_ylabel("Accuracy")
     accuracy_ax.set_title("Final split accuracy", fontweight="bold")
@@ -475,8 +481,12 @@ def plot_run_report(
     metrics_ax.grid(True, axis="y", alpha=0.3)
 
     counts_ax = fig.add_subplot(grid[2, 1])
-    counts_ax.bar(x - width / 2, true_counts, width, label="True count", color="#9ecae9")
-    counts_ax.bar(x + width / 2, pred_counts, width, label="Pred count", color="#fdae6b")
+    counts_ax.bar(
+        x - width / 2, true_counts, width, label="True count", color="#9ecae9"
+    )
+    counts_ax.bar(
+        x + width / 2, pred_counts, width, label="Pred count", color="#fdae6b"
+    )
     counts_ax.plot(
         x,
         correct_counts,
@@ -502,7 +512,10 @@ def plot_run_report(
         title_bits.append(f"val_acc={val_accs[-1]:.1%}")
     if "test_acc" in final_accuracies:
         title_bits.append(f"test_acc={float(final_accuracies['test_acc']):.1%}")
-    fig.suptitle("Training run report — " + ", ".join(str(bit) for bit in title_bits), fontsize=13)
+    fig.suptitle(
+        "Training run report — " + ", ".join(str(bit) for bit in title_bits),
+        fontsize=13,
+    )
 
     if save_path is not None:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")

@@ -58,7 +58,9 @@ def resting_state() -> CompartmentState:
 class TestNernstPotential:
     def test_equilibrium_concentrations_give_zero_reversal(self) -> None:
         internal = jnp.array([10.0, 20.0])
-        reversal = nernst_potential(internal, external_conc=10.0, valence=1.0, temp=_TEMPERATURE_K)
+        reversal = nernst_potential(
+            internal, external_conc=10.0, valence=1.0, temp=_TEMPERATURE_K
+        )
 
         np.testing.assert_allclose(np.asarray(reversal)[0], 0.0, atol=1e-12)
 
@@ -74,7 +76,9 @@ class TestNernstPotential:
 
         assert reversal > 0.0
 
-    def test_potassium_reversal_is_negative_when_internal_exceeds_external(self) -> None:
+    def test_potassium_reversal_is_negative_when_internal_exceeds_external(
+        self,
+    ) -> None:
         reversal = float(
             nernst_potential(
                 jnp.array([135.0]),
@@ -141,9 +145,7 @@ class TestBiophysicalDerivative:
             internal_na=jnp.array([18.0]),
             internal_k=jnp.array([135.0]),
         )
-        derivatives = biophysical_system_derivative(
-            state, system, jnp.array([0.0])
-        )
+        derivatives = biophysical_system_derivative(state, system, jnp.array([0.0]))
 
         assert derivatives.v_membrane.shape == (1,)
 

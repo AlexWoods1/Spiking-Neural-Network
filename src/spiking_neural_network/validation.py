@@ -60,8 +60,7 @@ def data_partitions(
     total_fraction = training_percentage + validation_percentage + test_percentage
     if not math.isclose(total_fraction, 1.0, rel_tol=0.0, abs_tol=1e-9):
         raise ValueError(
-            "partition percentages must sum to 1: "
-            f"got {total_fraction}"
+            "partition percentages must sum to 1: " f"got {total_fraction}"
         )
 
     training_size = int(data_size * training_percentage)

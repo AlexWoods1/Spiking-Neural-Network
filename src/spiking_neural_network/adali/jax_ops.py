@@ -265,14 +265,18 @@ def backward_pass(
         ) -> tuple[tuple[jax.Array, jax.Array], jax.Array]:
             d_u_next, d_w_acc = carry
             u_t, pre_t, ds_t = inputs
-            d_u = ds_t * adali_surrogate(
-                u_t,
-                v_minus,
-                v_plus,
-                v_th=v_th,
-                alpha=alpha,
-                beta=beta,
-            ) + leak * d_u_next
+            d_u = (
+                ds_t
+                * adali_surrogate(
+                    u_t,
+                    v_minus,
+                    v_plus,
+                    v_th=v_th,
+                    alpha=alpha,
+                    beta=beta,
+                )
+                + leak * d_u_next
+            )
             d_w_acc = d_w_acc + jnp.outer(d_u, pre_t)
             return (d_u, d_w_acc), d_u
 
@@ -288,7 +292,9 @@ def backward_pass(
 
         if layer > 0:
             d_u_hist = jnp.flip(d_u_hist_rev, axis=0)
-            d_spikes_list[layer - 1] = d_spikes_list[layer - 1] + d_u_hist @ weights[layer]
+            d_spikes_list[layer - 1] = (
+                d_spikes_list[layer - 1] + d_u_hist @ weights[layer]
+            )
 
     return tuple(d_weights_list)
 
@@ -322,14 +328,18 @@ def backward_pass_batched(
         ) -> tuple[tuple[jax.Array, jax.Array], jax.Array]:
             d_u_next, d_w_acc = carry
             u_t, pre_t, ds_t = inputs
-            d_u = ds_t * adali_surrogate(
-                u_t,
-                v_minus,
-                v_plus,
-                v_th=v_th,
-                alpha=alpha,
-                beta=beta,
-            ) + leak * d_u_next
+            d_u = (
+                ds_t
+                * adali_surrogate(
+                    u_t,
+                    v_minus,
+                    v_plus,
+                    v_th=v_th,
+                    alpha=alpha,
+                    beta=beta,
+                )
+                + leak * d_u_next
+            )
             d_w_acc = d_w_acc + d_u.T @ pre_t
             return (d_u, d_w_acc), d_u
 
@@ -345,7 +355,9 @@ def backward_pass_batched(
 
         if layer > 0:
             d_u_hist = jnp.flip(d_u_hist_rev, axis=0)
-            d_spikes_list[layer - 1] = d_spikes_list[layer - 1] + d_u_hist @ weights[layer]
+            d_spikes_list[layer - 1] = (
+                d_spikes_list[layer - 1] + d_u_hist @ weights[layer]
+            )
 
     return tuple(d_weights_list)
 

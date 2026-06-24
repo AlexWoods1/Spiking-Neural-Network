@@ -161,7 +161,11 @@ class TestMNISTDataProvider:
     def test_should_preencode_split_uses_float32_budget(self) -> None:
         num_samples = 100
         t_steps = 4
-        assert should_preencode_split(num_samples, t_steps, max_bytes=estimate_preencode_bytes(num_samples, t_steps))
+        assert should_preencode_split(
+            num_samples,
+            t_steps,
+            max_bytes=estimate_preencode_bytes(num_samples, t_steps),
+        )
 
 
 class TestDataModule:
@@ -193,8 +197,12 @@ class TestDataModule:
         module = DataModule(DataModuleConfig(batch_size=10, shuffle=True, seed=7))
         module.train = array_source(20)
 
-        first_epoch = [labels.tolist() for _, labels in module.train_dataloader(epoch=1)]
-        second_epoch = [labels.tolist() for _, labels in module.train_dataloader(epoch=2)]
+        first_epoch = [
+            labels.tolist() for _, labels in module.train_dataloader(epoch=1)
+        ]
+        second_epoch = [
+            labels.tolist() for _, labels in module.train_dataloader(epoch=2)
+        ]
 
         assert first_epoch != second_epoch
 

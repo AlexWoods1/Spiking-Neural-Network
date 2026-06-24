@@ -108,16 +108,17 @@ class Trainer:
                 run_test = (
                     evaluate_test
                     and eval_test_every > 0
-                    and (epoch % eval_test_every == 0 or epoch == self.config.total_epochs)
+                    and (
+                        epoch % eval_test_every == 0
+                        or epoch == self.config.total_epochs
+                    )
                 )
                 if run_val:
                     val_accuracy = self.evaluate(data_module.val_dataloader())
                     record["val_acc"] = val_accuracy
                 if run_test:
                     record["test_acc"] = self.evaluate(data_module.test_dataloader())
-                message = (
-                    f"epoch={epoch} lr={state.learning_rate:.4g} train_loss={train_loss:.4f}"
-                )
+                message = f"epoch={epoch} lr={state.learning_rate:.4g} train_loss={train_loss:.4f}"
                 if run_val:
                     message += f" val_acc={record['val_acc']:.1%}"
                 if run_test:

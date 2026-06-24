@@ -254,7 +254,42 @@ def test_plot_run_report_writes_png(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     run_dir.joinpath("run.json").write_text(
-        Path("outputs/h512_t16_wdot5_fast_jax/run.json").read_text(encoding="utf-8"),
+        """{
+  "config": {
+    "epochs": 2,
+    "t_steps": 8,
+    "hidden": 128,
+    "learning_rate": 0.25,
+    "backend": "jax"
+  },
+  "history": [
+    {"epoch": 1, "train_loss": 1.8, "learning_rate": 0.25},
+    {"epoch": 2, "train_loss": 1.6, "learning_rate": 0.01, "val_acc": 0.81}
+  ],
+  "final_accuracies": {
+    "train_acc": 0.8,
+    "val_acc": 0.81,
+    "test_acc": 0.79
+  },
+  "class_summary": [
+    {
+      "digit": 0,
+      "true_count": 10,
+      "pred_count": 9,
+      "correct": 8,
+      "recall": 0.8,
+      "precision": 0.89
+    },
+    {
+      "digit": 1,
+      "true_count": 12,
+      "pred_count": 11,
+      "correct": 10,
+      "recall": 0.83,
+      "precision": 0.91
+    }
+  ]
+}""",
         encoding="utf-8",
     )
     save_path = run_dir / "run_report.png"

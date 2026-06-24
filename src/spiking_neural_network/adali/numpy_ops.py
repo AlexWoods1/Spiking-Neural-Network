@@ -104,7 +104,10 @@ def focal_loss(
     modulating = (1.0 - true_class_probability) ** gamma
     loss = modulating * cross_entropy
     d_loss_d_cross_entropy = modulating + (
-        cross_entropy * gamma * (1.0 - true_class_probability) ** (gamma - 1) * true_class_probability
+        cross_entropy
+        * gamma
+        * (1.0 - true_class_probability) ** (gamma - 1)
+        * true_class_probability
     )
     if alpha is not None:
         loss = alpha * loss
@@ -141,13 +144,10 @@ def backward_pass(
     for layer in range(len(weights) - 1, -1, -1):
         d_u_next = np.zeros(weights[layer].shape[0])
         for timestep in range(cache.timesteps - 1, -1, -1):
-            d_u = (
-                d_spikes[layer][timestep]
-                * surrogate(
-                    cache.u_hist[layer][timestep],
-                    boundary.v_minus,
-                    boundary.v_plus,
-                )
+            d_u = d_spikes[layer][timestep] * surrogate(
+                cache.u_hist[layer][timestep],
+                boundary.v_minus,
+                boundary.v_plus,
             )
             d_u += leak * d_u_next
             d_weights[layer] += np.outer(d_u, cache.pre_syn[layer][timestep])

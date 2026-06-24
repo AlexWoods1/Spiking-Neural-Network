@@ -163,7 +163,9 @@ def test_split_indices_rejects_unsupported_split() -> None:
 
 def test_encode_image_spikes_rejects_non_2d_image() -> None:
     with pytest.raises(DatasetError, match="Expected 2D image"):
-        encode_image_spikes(np.zeros((4, 28, 28)), t_steps=4, rng=np.random.default_rng(0))
+        encode_image_spikes(
+            np.zeros((4, 28, 28)), t_steps=4, rng=np.random.default_rng(0)
+        )
 
 
 def test_preencode_mnist_split_rejects_invalid_image_stack() -> None:
@@ -184,7 +186,9 @@ def test_iter_mnist_samples_rejects_invalid_limit(mnist_available: Path) -> None
 
 
 def test_iter_mnist_samples_supports_shuffle(mnist_available: Path) -> None:
-    config = DataLoaderConfig(data_dir=mnist_available, shuffle=True, seed=11, batch_size=4)
+    config = DataLoaderConfig(
+        data_dir=mnist_available, shuffle=True, seed=11, batch_size=4
+    )
     samples = list(iter_mnist_samples(config, split=Split.TRAIN, limit=8))
     assert len(samples) == 8
 

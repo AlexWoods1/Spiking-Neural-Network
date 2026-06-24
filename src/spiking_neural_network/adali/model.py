@@ -52,7 +52,6 @@ class SNN_BaseModel(BaseModel, ABC):
         if backend == "jax":
             self._init_jax_weights()
 
-
     @property
     def leak(self) -> float:
         """Membrane leak factor ``exp(-dt / tau)``."""

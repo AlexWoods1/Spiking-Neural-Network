@@ -11,7 +11,11 @@ import pytest
 from spiking_neural_network.adali.model import AdaLi
 from spiking_neural_network.builder import ModelBuilder
 from spiking_neural_network.config import AdaLiConfig
-from spiking_neural_network.data_module import ArraySampleSource, DataModule, DataModuleConfig
+from spiking_neural_network.data_module import (
+    ArraySampleSource,
+    DataModule,
+    DataModuleConfig,
+)
 from spiking_neural_network.config import BaseModelConfig
 from spiking_neural_network.evaluation import (
     build_confusion_matrix,
@@ -252,7 +256,9 @@ def test_build_parser_disables_in_loop_test_eval_by_default() -> None:
     assert args.eval_test_every == 0
 
 
-def test_build_mnist_data_module_accepts_default_cli_args(mnist_available: Path) -> None:
+def test_build_mnist_data_module_accepts_default_cli_args(
+    mnist_available: Path,
+) -> None:
     args = build_parser().parse_args([])
     module = build_mnist_data_module(
         data_dir=mnist_available,

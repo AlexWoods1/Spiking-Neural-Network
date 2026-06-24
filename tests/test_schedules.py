@@ -47,17 +47,25 @@ class TestLearningRateSchedules:
         assert schedule(EpochContext(1, 1)) == pytest.approx(0.1)
 
     def test_linear_learning_rate_rejects_non_positive_initial(self) -> None:
-        with pytest.raises(ParameterError, match="initial learning rate must be positive"):
+        with pytest.raises(
+            ParameterError, match="initial learning rate must be positive"
+        ):
             linear_learning_rate(0.0, 0.01)
 
     def test_cosine_learning_rate_rejects_non_positive_final(self) -> None:
-        with pytest.raises(ParameterError, match="final learning rate must be positive"):
+        with pytest.raises(
+            ParameterError, match="final learning rate must be positive"
+        ):
             cosine_learning_rate(0.1, 0.0)
 
     def test_cosine_learning_rate_rejects_non_positive_initial(self) -> None:
-        with pytest.raises(ParameterError, match="initial learning rate must be positive"):
+        with pytest.raises(
+            ParameterError, match="initial learning rate must be positive"
+        ):
             cosine_learning_rate(0.0, 0.01)
 
     def test_linear_learning_rate_rejects_non_positive_final(self) -> None:
-        with pytest.raises(ParameterError, match="final learning rate must be positive"):
+        with pytest.raises(
+            ParameterError, match="final learning rate must be positive"
+        ):
             linear_learning_rate(0.1, 0.0)
