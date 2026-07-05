@@ -37,6 +37,16 @@ uv run --group dev black --check .
 uv run --group dev basedpyright
 ```
 
+## Documentation
+
+Build the Sphinx site locally:
+
+```bash
+uv run --group dev sphinx-build -b html docs docs/_build/html
+```
+
+Open `docs/_build/html/index.html` in a browser. Source lives in `docs/`.
+
 ## Layout
 
 ```

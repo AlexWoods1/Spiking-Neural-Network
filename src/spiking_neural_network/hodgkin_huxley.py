@@ -25,16 +25,7 @@ import jax.numpy as jnp
 
 
 class CompartmentState(NamedTuple):
-    """Dynamic state of one or more electrically coupled compartments.
-
-    Attributes:
-        v_membrane: Transmembrane voltage per compartment (mV).
-        m_gate: Sodium activation gate (dimensionless, in [0, 1]).
-        h_gate: Sodium inactivation gate (dimensionless, in [0, 1]).
-        n_gate: Potassium activation gate (dimensionless, in [0, 1]).
-        internal_na: Intracellular sodium concentration per compartment (mM).
-        internal_k: Intracellular potassium concentration per compartment (mM).
-    """
+    """Dynamic state of one or more electrically coupled compartments."""
 
     v_membrane: jnp.ndarray
     m_gate: jnp.ndarray
@@ -45,17 +36,7 @@ class CompartmentState(NamedTuple):
 
 
 class BioPhysicalSystem(NamedTuple):
-    """Static physical parameters of the simulated tissue.
-
-    Attributes:
-        spatial_distances: Distance between adjacent compartments (um).
-        axial_resistances: Axial resistance linking compartments (MOhm).
-        compartment_volumes: Compartment volume (L).
-        membrane_areas: Membrane surface area (cm^2).
-        external_na: Extracellular sodium concentration (mM).
-        external_k: Extracellular potassium concentration (mM).
-        temperature_kelvin: Absolute temperature (K).
-    """
+    """Static physical parameters of the simulated tissue."""
 
     spatial_distances: jnp.ndarray
     axial_resistances: jnp.ndarray
