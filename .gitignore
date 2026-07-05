@@ -218,4 +218,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# cmds for myself
 cmds_for_me.txt
