@@ -33,7 +33,7 @@ from spiking_neural_network.plotting import (
     plot_classified_image,
     plot_classified_sample_grid,
 )
-from spiking_neural_network.trainer import Trainer
+from spiking_neural_network.types import iter_batch_samples
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
@@ -153,7 +153,7 @@ def test_collect_predictions_matches_model_predict() -> None:
 
     expected_predictions = []
     for batch_x, _batch_y in module.test_dataloader():
-        for sample in Trainer.iter_samples(batch_x):
+        for sample in iter_batch_samples(batch_x):
             expected_predictions.append(model.predict(sample))
 
     _y_true, y_pred, _y_score = collect_predictions(model, module.test_dataloader())

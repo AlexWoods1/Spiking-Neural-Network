@@ -9,8 +9,9 @@ import numpy as np
 from tqdm import tqdm
 
 from spiking_neural_network.config import BaseModelConfig, TrainingConfig
-from spiking_neural_network.data_module import DataModule, SampleBatch
+from spiking_neural_network.data_module import DataModule
 from spiking_neural_network.schedules import EpochContext, EpochTrainingState
+from spiking_neural_network.types import SampleBatch, iter_batch_samples
 
 
 class BaseModel(ABC):
@@ -199,14 +200,9 @@ class Trainer:
                 correct += int(np.sum(predictions == batch_y))
                 total += int(batch_y.shape[0])
                 continue
-            for sample, label in zip(self.iter_samples(batch_x), batch_y, strict=True):
+            for sample, label in zip(iter_batch_samples(batch_x), batch_y, strict=True):
                 correct += self.model.predict(sample) == int(label)
                 total += 1
         if total == 0:
             raise ValueError("data_loader produced no samples")
         return float(correct) / total
-
-    @staticmethod
-    def iter_samples(batch: np.ndarray) -> Iterator[np.ndarray]:
-        for sample in batch:
-            yield sample

@@ -1,6 +1,14 @@
 import pytest
 
-from spiking_neural_network.validation import data_partitions, relative_error
+from spiking_neural_network.exceptions import ParameterError
+from spiking_neural_network.validation import (
+    data_partitions,
+    relative_error,
+    require_at_least,
+    require_in_range,
+    require_non_negative,
+    require_positive,
+)
 
 
 @pytest.mark.parametrize(
@@ -62,3 +70,37 @@ def test_data_partitions_accepts_floating_point_sum_near_one() -> None:
 
     assert train_size + val_size + test_size == 100
     assert test_size >= 0
+
+
+def test_require_positive_rejects_non_positive() -> None:
+    with pytest.raises(ParameterError, match="x must be positive"):
+        require_positive("x", 0)
+
+
+def test_require_at_least_rejects_below_minimum() -> None:
+    with pytest.raises(ParameterError, match="batch_size must be at least 1"):
+        require_at_least("batch_size", 0)
+
+
+def test_require_non_negative_rejects_negative() -> None:
+    with pytest.raises(ParameterError, match="gamma must be non-negative"):
+        require_non_negative("gamma", -1.0)
+
+
+def test_require_in_range_rejects_outside_open_interval() -> None:
+    with pytest.raises(ParameterError, match="decay must be between 0 and 1"):
+        require_in_range("decay", 1.0, 0.0, 1.0)
+
+
+def test_require_in_range_supports_half_open_interval() -> None:
+    with pytest.raises(
+        ParameterError, match="focal_alpha must be in \\(0, 1\\] when set"
+    ):
+        require_in_range(
+            "focal_alpha",
+            0.0,
+            0.0,
+            1.0,
+            high_inclusive=True,
+            message_suffix=" when set",
+        )

@@ -1,33 +1,22 @@
 import sys
-
 from pathlib import Path
-
-
 import numpy as np
-
-
 from spiking_neural_network.config import NetworkConfig, PreprocessConfig
-
-from spiking_neural_network.encoding import EncodingError, SpikeEncoding
-
+from spiking_neural_network.encoding import SpikeEncoding
+from spiking_neural_network.exceptions import EncodingError, ImageError
 from spiking_neural_network.images import (
-    ImageError,
     intensity_normalize,
     load_grayscale,
     resize_image,
 )
 
 from spiking_neural_network.lif import simulate_timesteps
-
 from spiking_neural_network.network import forward
-
 from spiking_neural_network.plotting import (
     plot_membrane_potential,
     plot_spike_encoding,
     plot_spikes,
 )
-
-from spiking_neural_network.validation import relative_error
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

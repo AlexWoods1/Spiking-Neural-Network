@@ -7,13 +7,10 @@ import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-from spiking_neural_network.pipeline import (
-    DataModule,
-    DataModuleConfig,
-    MNISTDataConfig,
-    SampleBatch,
-)
-from spiking_neural_network.datasets import DatasetError
+from spiking_neural_network.config import DataModuleConfig
+from spiking_neural_network.data_module import DataModule, MNISTDataConfig
+from spiking_neural_network.exceptions import DatasetError
+from spiking_neural_network.types import SampleBatch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data" / "mnist"

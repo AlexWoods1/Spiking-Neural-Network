@@ -6,9 +6,12 @@ from collections.abc import Iterator
 
 import numpy as np
 
-from spiking_neural_network.data_module import SampleBatch
 from spiking_neural_network.datasets import encode_image_spikes
-from spiking_neural_network.trainer import BaseModel, Trainer
+from spiking_neural_network.types import (
+    ClassifierModel,
+    SampleBatch,
+    iter_batch_samples,
+)
 
 
 def softmax(logits: np.ndarray) -> np.ndarray:
@@ -19,7 +22,7 @@ def softmax(logits: np.ndarray) -> np.ndarray:
 
 
 def predict_with_proba(
-    model: BaseModel,
+    model: ClassifierModel,
     sample: np.ndarray,
 ) -> tuple[int, np.ndarray]:
     """Return ``(predicted_label, class_probabilities)`` for one spike train."""
@@ -36,7 +39,7 @@ def predict_with_proba(
 
 
 def classify_image(
-    model: BaseModel,
+    model: ClassifierModel,
     image: np.ndarray,
     *,
     t_steps: int,
@@ -48,7 +51,7 @@ def classify_image(
 
 
 def collect_predictions(
-    model: BaseModel,
+    model: ClassifierModel,
     loader: Iterator[SampleBatch],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return ``(y_true, y_pred, y_score)`` for samples from a dataloader."""
@@ -66,7 +69,7 @@ def collect_predictions(
             y_score.extend(probabilities)
             continue
 
-        for sample, label in zip(Trainer.iter_samples(batch_x), batch_y, strict=True):
+        for sample, label in zip(iter_batch_samples(batch_x), batch_y, strict=True):
             predicted, probabilities = predict_with_proba(model, sample)
             y_true.append(int(label))
             y_pred.append(predicted)

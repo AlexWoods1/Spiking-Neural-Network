@@ -1,10 +1,14 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
 
 from spiking_neural_network.encoding import SpikeEncoding
+
+if TYPE_CHECKING:
+    from spiking_neural_network.types import ClassifierModel
 
 
 def plot_spike_encoding(
@@ -231,7 +235,7 @@ def plot_classified_image(
 
 
 def plot_classified_sample_grid(
-    model,
+    model: ClassifierModel,
     images: np.ndarray,
     labels: np.ndarray,
     *,

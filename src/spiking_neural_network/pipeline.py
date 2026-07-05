@@ -1,102 +1,25 @@
-"""Factories and public API for MNIST AdaLi training runs."""
+"""Factories for MNIST AdaLi training runs."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from spiking_neural_network.adali.model import AdaLi, ForwardCache, SNN_BaseModel
-from spiking_neural_network.config import (
-    AdaLiConfig,
-    BaseModelConfig,
-    DataModuleConfig,
-    SNN_Config,
-    TrainingConfig,
-)
-from spiking_neural_network.data_module import (
-    ArraySampleSource,
-    DataModule,
-    DataProvider,
-    MNISTDataConfig,
-    MNISTDataProvider,
-    MNISTSampleSource,
-    SampleBatch,
-    SampleSource,
-    preencode_mnist_source,
-)
-from spiking_neural_network.evaluation import (
-    build_confusion_matrix,
-    classify_image,
-    collect_predictions,
-    predict_with_proba,
-    print_prediction_summary,
-    softmax,
-)
-from spiking_neural_network.exceptions import ParameterError
-from spiking_neural_network.schedules import (
-    BoundaryState,
-    EpochContext,
-    EpochTrainingState,
-    cosine_learning_rate,
-    linear_learning_rate,
-)
-from spiking_neural_network.seeds import (
-    ENCODING_SEED_TEST_OFFSET,
-    ENCODING_SEED_TRAIN_OFFSET,
-    ENCODING_SEED_VAL_OFFSET,
-    MODEL_SEED_OFFSET,
-    SHUFFLE_SEED_OFFSET,
-    derived_seed,
-)
-from spiking_neural_network.trainer import BaseModel, Trainer
+from spiking_neural_network.adali.model import AdaLi
+from spiking_neural_network.config import AdaLiConfig, DataModuleConfig
+from spiking_neural_network.data_module import DataModule, MNISTDataConfig
+from spiking_neural_network.schedules import cosine_learning_rate
 
 MNIST_OFFICIAL_TRAIN = 60_000
 MNIST_OFFICIAL_TEST = 10_000
 MNIST_DEFAULT_VAL_SIZE = 10_000
 
 __all__ = [
-    "AdaLi",
-    "AdaLiConfig",
-    "ArraySampleSource",
-    "BaseModel",
-    "BaseModelConfig",
-    "BoundaryState",
     "build_adali_model",
-    "build_confusion_matrix",
     "build_mnist_data_module",
-    "classify_image",
-    "collect_predictions",
-    "cosine_learning_rate",
-    "DataModule",
-    "DataModuleConfig",
-    "DataProvider",
-    "ENCODING_SEED_TEST_OFFSET",
-    "ENCODING_SEED_TRAIN_OFFSET",
-    "ENCODING_SEED_VAL_OFFSET",
-    "EpochContext",
-    "EpochTrainingState",
-    "ForwardCache",
     "full_mnist_split_sizes",
-    "linear_learning_rate",
-    "MNISTDataConfig",
-    "MNISTDataProvider",
     "MNIST_DEFAULT_VAL_SIZE",
     "MNIST_OFFICIAL_TEST",
     "MNIST_OFFICIAL_TRAIN",
-    "MNISTSampleSource",
-    "MODEL_SEED_OFFSET",
-    "ParameterError",
-    "predict_with_proba",
-    "preencode_mnist_source",
-    "print_prediction_summary",
-    "SHUFFLE_SEED_OFFSET",
-    "SNN_BaseModel",
-    "SNN_Config",
-    "SampleBatch",
-    "SampleSource",
-    "softmax",
-    "Trainer",
-    "TrainingConfig",
-    "derived_seed",
 ]
 
 

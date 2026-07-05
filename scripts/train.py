@@ -14,14 +14,10 @@ from spiking_neural_network.evaluation import (
     collect_predictions,
     print_prediction_summary,
 )
-from spiking_neural_network.pipeline import (
-    ENCODING_SEED_TEST_OFFSET,
-    Trainer,
-    TrainingConfig,
-    build_adali_model,
-    build_mnist_data_module,
-    derived_seed,
-)
+from spiking_neural_network.config import TrainingConfig
+from spiking_neural_network.pipeline import build_adali_model, build_mnist_data_module
+from spiking_neural_network.seeds import ENCODING_SEED_TEST_OFFSET, derived_seed
+from spiking_neural_network.trainer import Trainer
 from spiking_neural_network.plotting import (
     plot_classified_image,
     plot_classified_sample_grid,

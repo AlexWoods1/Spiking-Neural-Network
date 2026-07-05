@@ -1,12 +1,11 @@
-import cv2
-import numpy as np
 from pathlib import Path
 
+import cv2
+import numpy as np
+
+from spiking_neural_network.exceptions import ImageError
+
 SUPPORTED_IMAGE_FORMATS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".gif"}
-
-
-class ImageError(Exception):
-    """Raised when an image cannot be loaded or used in the pipeline."""
 
 
 def show(img: np.ndarray) -> None:

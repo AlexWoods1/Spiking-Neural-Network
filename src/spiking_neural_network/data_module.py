@@ -17,7 +17,6 @@ from spiking_neural_network.datasets import (
     preencode_mnist_split,
     split_official_train_val,
 )
-from spiking_neural_network.exceptions import ParameterError
 from spiking_neural_network.seeds import (
     ENCODING_SEED_TEST_OFFSET,
     ENCODING_SEED_TRAIN_OFFSET,
@@ -25,8 +24,8 @@ from spiking_neural_network.seeds import (
     SHUFFLE_SEED_OFFSET,
     derived_seed,
 )
-
-SampleBatch = tuple[np.ndarray, np.ndarray]
+from spiking_neural_network.types import SampleBatch
+from spiking_neural_network.validation import require_at_least, require_positive
 
 MNIST_FEATURE_DIM = 784
 DEFAULT_PREENCODE_MAX_BYTES = 2 * 1024 * 1024 * 1024
@@ -69,21 +68,17 @@ class MNISTDataConfig:
     test_limit: int | None = None
 
     def __post_init__(self) -> None:
-        if self.t_steps < 1:
-            raise ParameterError("t_steps must be at least 1")
-        if self.val_size < 1:
-            raise ParameterError("val_size must be at least 1")
-        if self.seed <= 0:
-            raise ParameterError("seed must be positive")
+        require_at_least("t_steps", self.t_steps)
+        require_at_least("val_size", self.val_size)
+        require_positive("seed", self.seed)
         for name, limit in (
             ("train_limit", self.train_limit),
             ("val_limit", self.val_limit),
             ("test_limit", self.test_limit),
         ):
-            if limit is not None and limit < 1:
-                raise ParameterError(f"{name} must be at least 1 when set")
-        if self.preencode_max_bytes < 1:
-            raise ParameterError("preencode_max_bytes must be at least 1")
+            if limit is not None:
+                require_at_least(name, limit)
+        require_at_least("preencode_max_bytes", self.preencode_max_bytes)
 
 
 class SampleSource(ABC):

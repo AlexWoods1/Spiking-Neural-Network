@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from spiking_neural_network.exceptions import EncodingError
+
 
 def _poisson_samples(
     distribution: np.ndarray, t: int, rng: np.random.Generator | None = None
@@ -16,10 +18,6 @@ def _first_spike(samples: np.ndarray) -> np.ndarray:
     first = np.argmax(mask, axis=0)
     first[~mask.any(axis=0)] = -1
     return first
-
-
-class EncodingError(Exception):
-    """Raised when spike encoding inputs or indices are invalid."""
 
 
 def _validate_rates(rates: np.ndarray) -> None:
