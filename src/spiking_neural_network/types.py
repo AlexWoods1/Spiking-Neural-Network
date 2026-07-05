@@ -23,3 +23,4 @@ class ClassifierModel(Protocol):
 
     def predict(self, data: np.ndarray) -> int:
         """Return the predicted class index for one input sample."""
+        ...

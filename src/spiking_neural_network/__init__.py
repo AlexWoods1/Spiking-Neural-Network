@@ -1,5 +1,7 @@
 """Image-to-spike encoding for spiking neural network experiments."""
 
+# pyright: reportUnsupportedDunderAll=false
+
 from __future__ import annotations
 
 import importlib
