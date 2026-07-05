@@ -34,14 +34,6 @@ class TestTrainingConfigs:
         with pytest.raises(ParameterError, match="total_epochs must be at least 1"):
             TrainingConfig(train_name="x", total_epochs=0)
 
-    def test_training_config_rejects_invalid_train_name_type(self) -> None:
-        with pytest.raises(ParameterError, match="train_name must be a string"):
-            TrainingConfig(train_name=123, total_epochs=1)  # type: ignore[arg-type]
-
-    def test_training_config_rejects_invalid_total_epochs_type(self) -> None:
-        with pytest.raises(ParameterError, match="epochs must be an integer"):
-            TrainingConfig(train_name="x", total_epochs=1.5)  # type: ignore[arg-type]
-
     def test_data_module_config_rejects_invalid_seed(self) -> None:
         with pytest.raises(ParameterError, match="seed must be positive"):
             DataModuleConfig(seed=0)
@@ -121,16 +113,6 @@ class TestTrainingConfigs:
     def test_base_model_config_rejects_invalid_seed(self) -> None:
         with pytest.raises(ParameterError, match="seed must be positive"):
             BaseModelConfig(model_name="x", input_dim=1, output_dim=1, seed=0)
-
-    def test_base_model_config_rejects_invalid_types(self) -> None:
-        with pytest.raises(ParameterError, match="model_name must be a string"):
-            BaseModelConfig(model_name=123, input_dim=1, output_dim=1)  # type: ignore[arg-type]
-        with pytest.raises(ParameterError, match="input_dim must be an integer"):
-            BaseModelConfig(model_name="x", input_dim=1.5, output_dim=1)  # type: ignore[arg-type]
-        with pytest.raises(ParameterError, match="output_dim must be an integer"):
-            BaseModelConfig(model_name="x", input_dim=1, output_dim=1.5)  # type: ignore[arg-type]
-        with pytest.raises(ParameterError, match="seed must be an integer"):
-            BaseModelConfig(model_name="x", input_dim=1, output_dim=1, seed=1.5)  # type: ignore[arg-type]
 
     def test_snn_config_rejects_non_positive_input_and_output_dims(self) -> None:
         with pytest.raises(ParameterError, match="input_dim must be positive"):

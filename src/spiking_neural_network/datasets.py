@@ -10,14 +10,11 @@ from pathlib import Path
 import numpy as np
 
 from spiking_neural_network.encoding import SpikeEncoding
+from spiking_neural_network.exceptions import DatasetError
 from spiking_neural_network.lif import flatten_spikes
 
 _MNIST_IMAGE_MAGIC = 2051
 _MNIST_LABEL_MAGIC = 2049
-
-
-class DatasetError(Exception):
-    """Raised when a dataset file is missing or invalid."""
 
 
 class Split(str, Enum):

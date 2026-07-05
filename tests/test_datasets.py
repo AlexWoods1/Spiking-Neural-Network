@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from spiking_neural_network.datasets import (
-    DatasetError,
     DataLoaderConfig,
     Split,
     _read_idx,
@@ -17,6 +16,7 @@ from spiking_neural_network.datasets import (
     preencode_mnist_split,
     split_official_train_val,
 )
+from spiking_neural_network.exceptions import DatasetError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data" / "mnist"

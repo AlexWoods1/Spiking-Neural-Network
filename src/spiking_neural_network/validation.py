@@ -1,8 +1,72 @@
-"""Small validation helpers for metrics and dataset sizing."""
+"""Small validation helpers for metrics, dataset sizing, and config fields."""
 
 from __future__ import annotations
 
 import math
+
+from spiking_neural_network.exceptions import ParameterError
+
+
+def require_positive(name: str, value: float | int) -> None:
+    """Raise ``ParameterError`` when ``value`` is not strictly positive."""
+    if value <= 0:
+        raise ParameterError(f"{name} must be positive")
+
+
+def require_at_least(name: str, value: int, minimum: int = 1) -> None:
+    """Raise ``ParameterError`` when ``value`` is below ``minimum``."""
+    if value < minimum:
+        raise ParameterError(f"{name} must be at least {minimum}")
+
+
+def require_non_negative(name: str, value: float | int) -> None:
+    """Raise ``ParameterError`` when ``value`` is negative."""
+    if value < 0:
+        raise ParameterError(f"{name} must be non-negative")
+
+
+def require_in_range(
+    name: str,
+    value: float,
+    low: float,
+    high: float,
+    *,
+    low_inclusive: bool = False,
+    high_inclusive: bool = False,
+    message_suffix: str = "",
+) -> None:
+    """Raise ``ParameterError`` when ``value`` falls outside ``(low, high)``."""
+    below = value < low if low_inclusive else value <= low
+    above = value > high if high_inclusive else value >= high
+    if below or above:
+        raise ParameterError(
+            _range_message(
+                name,
+                low,
+                high,
+                low_inclusive=low_inclusive,
+                high_inclusive=high_inclusive,
+                message_suffix=message_suffix,
+            )
+        )
+
+
+def _range_message(
+    name: str,
+    low: float,
+    high: float,
+    *,
+    low_inclusive: bool,
+    high_inclusive: bool,
+    message_suffix: str,
+) -> str:
+    if not low_inclusive and high_inclusive:
+        return f"{name} must be in ({low:g}, {high:g}]{message_suffix}"
+    if low_inclusive and not high_inclusive:
+        return f"{name} must be in [{low:g}, {high:g}){message_suffix}"
+    if low_inclusive and high_inclusive:
+        return f"{name} must be between {low:g} and {high:g} inclusive{message_suffix}"
+    return f"{name} must be between {low:g} and {high:g}{message_suffix}"
 
 
 def relative_error(expected: float, actual: float) -> float:

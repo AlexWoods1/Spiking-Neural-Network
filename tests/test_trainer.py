@@ -14,6 +14,7 @@ from spiking_neural_network.config import (
 )
 from spiking_neural_network.data_module import DataModule
 from spiking_neural_network.schedules import EpochContext, EpochTrainingState
+from spiking_neural_network.types import iter_batch_samples
 from spiking_neural_network.trainer import BaseModel, Trainer
 from tests.helpers import array_source, spike_batch
 
@@ -165,9 +166,9 @@ class TestTrainer:
         with pytest.raises(ValueError, match="eval_val_every must be at least 1"):
             trainer.fit(module, eval_val_every=0)
 
-    def test_iter_samples_yields_batch_rows(self) -> None:
+    def test_iter_batch_samples_yields_batch_rows(self) -> None:
         batch = spike_batch(3)
-        samples = list(Trainer.iter_samples(batch))
+        samples = list(iter_batch_samples(batch))
 
         assert len(samples) == 3
         assert samples[0].shape == batch[0].shape

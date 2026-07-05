@@ -9,6 +9,12 @@ from spiking_neural_network.schedules import (
     LearningRateSchedule,
     _validate_learning_rate,
 )
+from spiking_neural_network.validation import (
+    require_at_least,
+    require_in_range,
+    require_non_negative,
+    require_positive,
+)
 
 
 @dataclass(frozen=True)
@@ -25,9 +31,6 @@ class EncodingConfig:
     def make_rng(self) -> np.random.Generator:
         """Return a NumPy random generator seeded from config."""
         return np.random.default_rng(self.seed)
-
-
-### for LIF Model.
 
 
 @dataclass(frozen=True)
@@ -142,12 +145,7 @@ class TrainingConfig:
     def __post_init__(self) -> None:
         if self.train_name is None:
             raise ParameterError("train_name must be provided")
-        if self.train_name is not None and not isinstance(self.train_name, str):
-            raise ParameterError("train_name must be a string")
-        if self.total_epochs is not None and not isinstance(self.total_epochs, int):
-            raise ParameterError("epochs must be an integer")
-        if self.total_epochs < 1:
-            raise ParameterError("total_epochs must be at least 1")
+        require_at_least("total_epochs", self.total_epochs)
 
 
 @dataclass(frozen=True)
@@ -159,10 +157,8 @@ class DataModuleConfig:
     seed: int = 42
 
     def __post_init__(self) -> None:
-        if self.batch_size < 1:
-            raise ParameterError("batch_size must be at least 1")
-        if self.seed <= 0:
-            raise ParameterError("seed must be positive")
+        require_at_least("batch_size", self.batch_size)
+        require_positive("seed", self.seed)
 
 
 @dataclass(frozen=True)
@@ -177,23 +173,11 @@ class BaseModelConfig:
     def __post_init__(self) -> None:
         if self.model_name is None:
             raise ParameterError("model_name must be provided")
-        if self.model_name is not None and not isinstance(self.model_name, str):
-            raise ParameterError("model_name must be a string")
-        if self.input_dim is not None and not isinstance(self.input_dim, int):
-            raise ParameterError("input_dim must be an integer")
-        if self.output_dim is not None and not isinstance(self.output_dim, int):
-            raise ParameterError("output_dim must be an integer")
-        if self.seed is not None and not isinstance(self.seed, int):
-            raise ParameterError("seed must be an integer")
-
-        if self.seed <= 0:
-            raise ParameterError("seed must be positive")
-
-        if self.input_dim is not None and self.input_dim <= 0:
-            raise ParameterError("input_dim must be positive")
-
-        if self.output_dim is not None and self.output_dim <= 0:
-            raise ParameterError("output_dim must be positive")
+        require_positive("seed", self.seed)
+        if self.input_dim is not None:
+            require_positive("input_dim", self.input_dim)
+        if self.output_dim is not None:
+            require_positive("output_dim", self.output_dim)
 
 
 @dataclass(frozen=True)
@@ -213,22 +197,16 @@ class SNN_Config(BaseModelConfig):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.dt <= 0:
-            raise ParameterError("dt must be positive")
-        if self.tau <= 0:
-            raise ParameterError("tau must be positive")
-        if self.input_dim <= 0:
-            raise ParameterError("input_dim must be positive")
-        if self.output_dim <= 0:
-            raise ParameterError("output_dim must be positive")
-        if self.weight_scale <= 0:
-            raise ParameterError("weight_scale must be positive")
-        if any(dim <= 0 for dim in self.hidden_dims):
-            raise ParameterError("hidden_dim must be positive")
+        require_positive("dt", self.dt)
+        require_positive("tau", self.tau)
+        require_positive("input_dim", self.input_dim)
+        require_positive("output_dim", self.output_dim)
+        require_positive("weight_scale", self.weight_scale)
         if not self.hidden_dims:
             raise ParameterError("hidden_dim must be provided")
-        if self.decay <= 0 or self.decay >= 1:
-            raise ParameterError("decay must be between 0 and 1")
+        for dim in self.hidden_dims:
+            require_positive("hidden_dim", dim)
+        require_in_range("decay", self.decay, 0.0, 1.0)
         _validate_learning_rate(self.learning_rate)
 
 
@@ -247,25 +225,25 @@ class AdaLiConfig(SNN_Config):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.v_th <= 0:
-            raise ParameterError("v_th must be positive")
-        if self.alpha <= 0:
-            raise ParameterError("alpha must be positive")
-        if self.beta <= 0:
-            raise ParameterError("beta must be positive")
-        if not (0.0 < self.p < 1.0):
-            raise ParameterError("p must be between 0 and 1")
-        if self.left_initial <= 0:
-            raise ParameterError("left_initial must be positive")
-        if self.right_initial <= 0:
-            raise ParameterError("right_initial must be positive")
+        require_positive("v_th", self.v_th)
+        require_positive("alpha", self.alpha)
+        require_positive("beta", self.beta)
+        require_in_range("p", self.p, 0.0, 1.0)
+        require_positive("left_initial", self.left_initial)
+        require_positive("right_initial", self.right_initial)
         if self.left_initial >= self.right_initial:
             raise ParameterError("left_initial must be less than right_initial")
         if self.left_initial > self.v_th:
             raise ParameterError("left_initial must be less than v_th")
         if self.right_initial < self.v_th:
             raise ParameterError("right_initial must be greater than v_th")
-        if self.focal_gamma < 0:
-            raise ParameterError("focal_gamma must be non-negative")
-        if self.focal_alpha is not None and not (0.0 < self.focal_alpha <= 1.0):
-            raise ParameterError("focal_alpha must be in (0, 1] when set")
+        require_non_negative("focal_gamma", self.focal_gamma)
+        if self.focal_alpha is not None:
+            require_in_range(
+                "focal_alpha",
+                self.focal_alpha,
+                0.0,
+                1.0,
+                high_inclusive=True,
+                message_suffix=" when set",
+            )

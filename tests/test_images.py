@@ -5,8 +5,8 @@ import cv2
 import numpy as np
 import pytest
 
+from spiking_neural_network.exceptions import ImageError
 from spiking_neural_network.images import (
-    ImageError,
     intensity_normalize,
     load_grayscale,
     resize_image,
