@@ -27,13 +27,7 @@ from spiking_neural_network.hopfield.hopfield import create_random_pattern
 
 
 class HopfieldState(NamedTuple):
-    """Immutable Hopfield network parameters stored on device.
-
-    Attributes:
-        weights: Symmetric weight matrix of shape ``(neurons, neurons)``.
-        patterns: Stored bipolar patterns of shape ``(num_patterns, neurons)``.
-        max_iterations: Upper bound on recall update steps.
-    """
+    """Immutable Hopfield network parameters stored on device."""
 
     weights: jnp.ndarray
     patterns: jnp.ndarray
