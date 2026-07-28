@@ -102,7 +102,9 @@ def test_spiking_lstm_path_has_nonzero_gate_grad() -> None:
     params = init_params(cfg, jax.random.PRNGKey(2))
     idx = jnp.arange(8, dtype=jnp.int32).reshape(1, 8) % cfg.vocab_size
     targets = jnp.roll(idx, -1, axis=1)
-    loss, grads = jax.value_and_grad(loss_fn)(params, idx, targets, cfg)
+    loss, grads = jax.value_and_grad(loss_fn)(
+        params, idx, targets, cfg, jax.random.PRNGKey(20)
+    )
     assert jnp.isfinite(loss)
     lstm_w_grad = grads["blocks"][0]["lstm"]["W"]
     assert float(jnp.abs(lstm_w_grad).sum()) > 0.0
@@ -115,7 +117,9 @@ def test_one_step_train_updates_params() -> None:
     targets = jnp.ones((2, 8), dtype=jnp.int32)
     optimizer = optax.adamw(learning_rate=1e-2)
     opt_state = optimizer.init(params)
-    loss, grads = jax.value_and_grad(loss_fn)(params, idx, targets, cfg)
+    loss, grads = jax.value_and_grad(loss_fn)(
+        params, idx, targets, cfg, jax.random.PRNGKey(20)
+    )
     updates, opt_state = optimizer.update(grads, opt_state, params)
     new_params = optax.apply_updates(params, updates)
     delta = jnp.sum(
@@ -355,6 +359,34 @@ def test_learnable_lif_params_and_rate_aux_grad() -> None:
     assert "v_th_raw" in params["blocks"][0]["lstm"]
     idx = jnp.arange(8, dtype=jnp.int32).reshape(1, 8) % cfg.vocab_size
     targets = jnp.roll(idx, -1, axis=1)
-    loss, grads = jax.value_and_grad(loss_fn)(params, idx, targets, cfg)
+    loss, grads = jax.value_and_grad(loss_fn)(
+        params, idx, targets, cfg, jax.random.PRNGKey(20)
+    )
     assert jnp.isfinite(loss)
     assert float(jnp.abs(grads["blocks"][0]["lstm"]["leak_logit"])) >= 0.0
+
+
+def test_dropout_changes_train_logits() -> None:
+    cfg = ModelConfig(
+        n_layer=1,
+        n_head=2,
+        n_embd=8,
+        block_size=16,
+        vocab_size=12,
+        bias=True,
+        dropout=0.5,
+    )
+    params = init_params(cfg, jax.random.PRNGKey(12))
+    idx = jnp.arange(8, dtype=jnp.int32).reshape(1, 8) % cfg.vocab_size
+    logits_eval, _, _ = forward(params, idx, cfg, train=False)
+    logits_a, _, _ = forward(
+        params, idx, cfg, rng=jax.random.PRNGKey(1), train=True
+    )
+    logits_b, _, _ = forward(
+        params, idx, cfg, rng=jax.random.PRNGKey(2), train=True
+    )
+    assert jnp.allclose(logits_eval, logits_eval)  # sanity
+    # * Different dropout masks → different train logits.
+    assert not jnp.allclose(logits_a, logits_b, atol=1e-5)
+    # * Eval is deterministic and differs from a dropped-out forward.
+    assert not jnp.allclose(logits_eval, logits_a, atol=1e-5)

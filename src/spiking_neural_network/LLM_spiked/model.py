@@ -68,6 +68,23 @@ def _spike_rate_loss(
     return total / 3.0
 
 
+def _dropout(
+    x: jax.Array,
+    rate: float,
+    rng: jax.Array | None,
+    *,
+    train: bool,
+) -> jax.Array:
+    """Standard inverted dropout; identity when ``not train`` or ``rate==0``."""
+    if (not train) or rate <= 0.0:
+        return x
+    if rng is None:
+        raise ValueError("rng is required when dropout is active in train mode")
+    keep = 1.0 - rate
+    mask = jax.random.bernoulli(rng, keep, x.shape).astype(x.dtype)
+    return x * mask / keep
+
+
 def _layer_norm(
     x: jax.Array,
     scale: jax.Array,
@@ -193,23 +210,34 @@ def _spiking_lstm(
 
 
 def _block(
-    x: jax.Array, params: Params, cfg: ModelConfig
+    x: jax.Array,
+    params: Params,
+    cfg: ModelConfig,
+    rng: jax.Array | None,
+    *,
+    train: bool,
 ) -> tuple[jax.Array, SpikeRates]:
-    """Pre-norm residual: attention then Spiking LSTM."""
+    """Pre-norm residual: attention then Spiking LSTM (+ residual dropout)."""
+    rng_attn, rng_lstm = (None, None)
+    if train and cfg.dropout > 0.0:
+        assert rng is not None
+        rng_attn, rng_lstm = jax.random.split(rng)
+
     ln1 = params["ln1"]
-    x = x + _causal_self_attention(
+    a_out = _causal_self_attention(
         _layer_norm(x, ln1["scale"], ln1.get("bias"), eps=1e-5),
         params["attn"],
         n_head=cfg.n_head,
         bias=cfg.bias,
     )
+    x = x + _dropout(a_out, cfg.dropout, rng_attn, train=train)
     ln2 = params["ln2"]
     h, rates = _spiking_lstm(
         _layer_norm(x, ln2["scale"], ln2.get("bias"), eps=1e-5),
         params["lstm"],
         cfg,
     )
-    x = x + h
+    x = x + _dropout(h, cfg.dropout, rng_lstm, train=train)
     return x, rates
 
 
@@ -293,6 +321,9 @@ def forward(
     idx: jax.Array,
     cfg: ModelConfig,
     targets: jax.Array | None = None,
+    *,
+    rng: jax.Array | None = None,
+    train: bool = False,
 ) -> tuple[jax.Array, jax.Array | None, SpikeRates | None]:
     """Forward pass returning logits, optional CE loss, and optional spike rates.
 
@@ -301,6 +332,8 @@ def forward(
         idx: Token ids with shape ``(B, T)``.
         cfg: Model configuration.
         targets: Optional target ids ``(B, T)`` for cross-entropy.
+        rng: Dropout PRNG key (required when ``train`` and ``dropout>0``).
+        train: If True, apply embedding / residual dropout.
 
     Returns:
         ``(logits, loss, rates)`` where ``logits`` has shape ``(B, T, V)``,
@@ -313,14 +346,24 @@ def forward(
             f"Cannot forward sequence of length {t}, "
             f"block size is only {cfg.block_size}"
         )
+    n_drop = 1 + cfg.n_layer  # embed + one key per block
+    drop_keys: list[jax.Array | None] = [None] * n_drop
+    if train and cfg.dropout > 0.0:
+        if rng is None:
+            raise ValueError("rng is required when train=True and dropout>0")
+        drop_keys = list(jax.random.split(rng, n_drop))
+
     pos = jnp.arange(t)
     x = params["wte"][idx] + params["wpe"][pos]
+    x = _dropout(x, cfg.dropout, drop_keys[0], train=train)
     rate_i = jnp.asarray(0.0, dtype=x.dtype)
     rate_f = jnp.asarray(0.0, dtype=x.dtype)
     rate_o = jnp.asarray(0.0, dtype=x.dtype)
     n_blocks = 0
-    for block_params in params["blocks"]:
-        x, rates = _block(x, block_params, cfg)
+    for i, block_params in enumerate(params["blocks"]):
+        x, rates = _block(
+            x, block_params, cfg, drop_keys[1 + i], train=train
+        )
         rate_i = rate_i + rates[0]
         rate_f = rate_f + rates[1]
         rate_o = rate_o + rates[2]
@@ -358,9 +401,12 @@ def loss_fn(
     idx: jax.Array,
     targets: jax.Array,
     cfg: ModelConfig,
+    rng: jax.Array,
 ) -> jax.Array:
     """Scalar training loss (CE + optional spike-rate aux) for ``value_and_grad``."""
-    _, ce, rates = forward(params, idx, cfg, targets)
+    _, ce, rates = forward(
+        params, idx, cfg, targets, rng=rng, train=True
+    )
     assert ce is not None
     assert rates is not None
     if cfg.spike_rate_weight <= 0.0:
@@ -374,8 +420,8 @@ def ce_loss_fn(
     targets: jax.Array,
     cfg: ModelConfig,
 ) -> jax.Array:
-    """CE-only loss for evaluation (ignores spike-rate aux weight)."""
-    _, ce, _ = forward(params, idx, cfg, targets)
+    """CE-only loss for evaluation (no dropout, ignores spike-rate aux)."""
+    _, ce, _ = forward(params, idx, cfg, targets, train=False)
     assert ce is not None
     return ce
 
@@ -385,8 +431,8 @@ def spike_rates_fn(
     idx: jax.Array,
     cfg: ModelConfig,
 ) -> SpikeRates:
-    """Mean gate spike rates ``(i, f, o)`` for a batch (no targets)."""
-    _, _, rates = forward(params, idx, cfg, targets=None)
+    """Mean gate spike rates ``(i, f, o)`` for a batch (no targets, no dropout)."""
+    _, _, rates = forward(params, idx, cfg, targets=None, train=False)
     assert rates is not None
     return rates
 
@@ -399,6 +445,7 @@ def _cfg_cache_key(cfg: ModelConfig) -> tuple[Any, ...]:
         cfg.block_size,
         cfg.vocab_size,
         cfg.bias,
+        cfg.dropout,
         cfg.v_th,
         cfg.leak,
         cfg.v_minus,
@@ -424,24 +471,25 @@ def _bind_forward_logits_cached(key: tuple[Any, ...]) -> LogitsFn:
         block_size=key[3],
         vocab_size=key[4],
         bias=key[5],
-        v_th=key[6],
-        leak=key[7],
-        v_minus=key[8],
-        v_plus=key[9],
-        alpha=key[10],
-        beta=key[11],
-        learnable_lif=key[12],
-        leaky_clamp_slope=key[13],
-        spike_rate_weight=key[14],
-        target_rate_i=key[15],
-        target_rate_f=key[16],
-        target_rate_o=key[17],
-        rate_floor=key[18],
+        dropout=key[6],
+        v_th=key[7],
+        leak=key[8],
+        v_minus=key[9],
+        v_plus=key[10],
+        alpha=key[11],
+        beta=key[12],
+        learnable_lif=key[13],
+        leaky_clamp_slope=key[14],
+        spike_rate_weight=key[15],
+        target_rate_i=key[16],
+        target_rate_f=key[17],
+        target_rate_o=key[18],
+        rate_floor=key[19],
     )
 
     @jax.jit
     def forward_logits(params: Params, idx: jax.Array) -> jax.Array:
-        logits, _, _ = forward(params, idx, cfg, targets=None)
+        logits, _, _ = forward(params, idx, cfg, targets=None, train=False)
         return logits
 
     return forward_logits
@@ -452,12 +500,19 @@ def bind_forward_logits(cfg: ModelConfig) -> LogitsFn:
     return _bind_forward_logits_cached(_cfg_cache_key(cfg))
 
 
-def bind_loss_fn(cfg: ModelConfig) -> Callable[[Params, jax.Array, jax.Array], jax.Array]:
-    """Return a JIT training loss (CE + rate aux) closed over ``cfg``."""
+def bind_loss_fn(
+    cfg: ModelConfig,
+) -> Callable[[Params, jax.Array, jax.Array, jax.Array], jax.Array]:
+    """Return a JIT training loss (CE + rate aux + dropout) closed over ``cfg``."""
 
     @jax.jit
-    def _loss(params: Params, idx: jax.Array, targets: jax.Array) -> jax.Array:
-        return loss_fn(params, idx, targets, cfg)
+    def _loss(
+        params: Params,
+        idx: jax.Array,
+        targets: jax.Array,
+        rng: jax.Array,
+    ) -> jax.Array:
+        return loss_fn(params, idx, targets, cfg, rng)
 
     return _loss
 
@@ -791,19 +846,20 @@ def _bind_generate_fns_cached(key: tuple[Any, ...]) -> GenerateFns:
         block_size=key[3],
         vocab_size=key[4],
         bias=key[5],
-        v_th=key[6],
-        leak=key[7],
-        v_minus=key[8],
-        v_plus=key[9],
-        alpha=key[10],
-        beta=key[11],
-        learnable_lif=key[12],
-        leaky_clamp_slope=key[13],
-        spike_rate_weight=key[14],
-        target_rate_i=key[15],
-        target_rate_f=key[16],
-        target_rate_o=key[17],
-        rate_floor=key[18],
+        dropout=key[6],
+        v_th=key[7],
+        leak=key[8],
+        v_minus=key[9],
+        v_plus=key[10],
+        alpha=key[11],
+        beta=key[12],
+        learnable_lif=key[13],
+        leaky_clamp_slope=key[14],
+        spike_rate_weight=key[15],
+        target_rate_i=key[16],
+        target_rate_f=key[17],
+        target_rate_o=key[18],
+        rate_floor=key[19],
     )
 
     @partial(jax.jit, static_argnames=("length",))

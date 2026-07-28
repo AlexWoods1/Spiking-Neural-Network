@@ -209,9 +209,13 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
     cfg.model.vocab_size = data.tokenizer.vocab_size
 
     key = jax.random.PRNGKey(cfg.train.seed)
-    params = init_params(cfg.model, key)
+    key, init_key = jax.random.split(key)
+    params = init_params(cfg.model, init_key)
     n_params = count_parameters(params)
-    print(f"params={n_params:,} vocab={cfg.model.vocab_size}")
+    print(
+        f"params={n_params:,} vocab={cfg.model.vocab_size} "
+        f"dropout={cfg.model.dropout}"
+    )
 
     optimizer = optax.chain(
         optax.clip_by_global_norm(cfg.train.grad_clip),
@@ -234,9 +238,10 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
         xb: jax.Array,
         yb: jax.Array,
         lr: jax.Array,
+        rng: jax.Array,
     ) -> tuple[Params, Any, jax.Array]:
         def _loss(p: Params) -> jax.Array:
-            return loss_jit(p, xb, yb)
+            return loss_jit(p, xb, yb, rng)
 
         loss, grads = jax.value_and_grad(_loss)(params)
         updates, opt_state = optimizer.update(grads, opt_state, params)
@@ -256,6 +261,7 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
     pbar = tqdm(range(1, cfg.train.max_steps + 1), desc="train")
     for step in pbar:
         lr = get_lr(step, cfg.train)
+        key, step_key = jax.random.split(key)
         # * Kick off host→device copy for the *next* step while this step runs.
         next_xb_np, next_yb_np = data.get_batch(
             "train", cfg.train.batch_size, cfg.model.block_size
@@ -269,6 +275,7 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
             xb,
             yb,
             jnp.asarray(lr, dtype=jnp.float32),
+            step_key,
         )
         pbar.set_postfix(loss=float(loss), lr=lr)
         xb, yb = next_xb, next_yb

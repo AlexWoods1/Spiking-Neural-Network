@@ -6,7 +6,7 @@ model:
   n_embd: 128
   block_size: 256
   vocab_size: 1024     # overridden from tokenizer at train time
-  dropout: 0.1
+  dropout: 0.2
   bias: true
   v_th: 0.5
   leak: 0.5
