@@ -15,7 +15,11 @@ except ImportError as exc:
 
 from spiking_neural_network.LLM_spiked.config import ModelConfig
 from spiking_neural_network.LLM_spiked.data import CharTokenizer
-from spiking_neural_network.LLM_spiked.model import Params, forward
+from spiking_neural_network.LLM_spiked.model import (
+    Params,
+    bind_forward_logits,
+    left_pad_block,
+)
 
 
 def load_checkpoint(
@@ -82,6 +86,9 @@ def generate(
 ) -> str:
     """Autoregressive character sampling from a SpikedLM checkpoint.
 
+    Uses a JIT logits fn with fixed ``block_size`` left-padding so each new
+    token reuses one compiled kernel instead of re-tracing every step.
+
     Args:
         params: Model parameters.
         tok: Character tokenizer.
@@ -98,10 +105,16 @@ def generate(
     rng = np.random.default_rng(seed)
     ids = tok.encode(prompt) if prompt else tok.encode("\n")
     block_size = model_cfg.block_size
+    forward_logits = bind_forward_logits(model_cfg)
+
+    # * Warmup compile once with the fixed (1, block_size) shape.
+    warm = left_pad_block(ids, block_size)
+    _ = forward_logits(params, jnp.asarray(warm[None, :], dtype=jnp.int32)).block_until_ready()
+
     for _ in range(max_tokens):
-        ctx = ids[-block_size:]
-        idx = jnp.asarray([ctx], dtype=jnp.int32)
-        logits, _ = forward(params, idx, model_cfg)
+        ctx = left_pad_block(ids, block_size)
+        idx = jnp.asarray(ctx[None, :], dtype=jnp.int32)
+        logits = forward_logits(params, idx)
         logits_last = np.asarray(logits[0, -1, :], dtype=np.float64)
         logits_last = logits_last / max(temperature, 1e-6)
         if top_k is not None and top_k > 0:

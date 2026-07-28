@@ -22,9 +22,11 @@ from spiking_neural_network.LLM_spiked.config import Config, TrainConfig, load_c
 from spiking_neural_network.LLM_spiked.data import CharDataset, CharTokenizer
 from spiking_neural_network.LLM_spiked.model import (
     Params,
+    bind_forward_logits,
     count_parameters,
     forward,
     init_params,
+    left_pad_block,
     loss_fn,
 )
 
@@ -74,15 +76,20 @@ def sample_text(
     temperature: float = 0.8,
     rng: np.random.Generator | None = None,
 ) -> str:
-    """Generate a short continuation from a newline prompt."""
+    """Generate a short continuation from a newline prompt (JIT logits)."""
     rng = rng if rng is not None else np.random.default_rng()
     prompt = "\n"
     ids = data.tokenizer.encode(prompt)
     block_size = cfg.model.block_size
+    forward_logits = bind_forward_logits(cfg.model)
+    warm = left_pad_block(ids, block_size)
+    _ = forward_logits(
+        params, jnp.asarray(warm[None, :], dtype=jnp.int32)
+    ).block_until_ready()
     for _ in range(max_new_tokens):
-        ctx = ids[-block_size:]
-        idx = jnp.asarray([ctx], dtype=jnp.int32)
-        logits, _ = forward(params, idx, cfg.model)
+        ctx = left_pad_block(ids, block_size)
+        idx = jnp.asarray(ctx[None, :], dtype=jnp.int32)
+        logits = forward_logits(params, idx)
         logits_last = np.asarray(logits[0, -1, :], dtype=np.float64)
         logits_last = logits_last / max(temperature, 1e-6)
         logits_last = logits_last - logits_last.max()

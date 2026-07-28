@@ -11,9 +11,11 @@ from spiking_neural_network.LLM_spiked.config import (
 from spiking_neural_network.LLM_spiked.data import CharDataset, CharTokenizer
 from spiking_neural_network.LLM_spiked.generate import generate, load_checkpoint
 from spiking_neural_network.LLM_spiked.model import (
+    bind_forward_logits,
     count_parameters,
     forward,
     init_params,
+    left_pad_block,
     loss_fn,
 )
 from spiking_neural_network.LLM_spiked.spikes import spike
@@ -27,11 +29,13 @@ __all__ = [
     "ModelConfig",
     "PathsConfig",
     "TrainConfig",
+    "bind_forward_logits",
     "count_parameters",
     "forward",
     "generate",
     "get_lr",
     "init_params",
+    "left_pad_block",
     "load_checkpoint",
     "load_config",
     "loss_fn",

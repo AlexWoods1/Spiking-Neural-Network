@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
+
 try:
     import jax
     import jax.numpy as jnp
@@ -261,3 +263,35 @@ def loss_fn(
     _, loss = forward(params, idx, cfg, targets)
     assert loss is not None
     return loss
+
+
+def bind_forward_logits(cfg: ModelConfig):
+    """Return a JIT logits function closed over ``cfg`` (fixed compile).
+
+    Args:
+        cfg: Model configuration captured as compile-time constants.
+
+    Returns:
+        ``forward_logits(params, idx) -> logits`` with ``idx`` shape ``(B, T)``.
+    """
+
+    @jax.jit
+    def forward_logits(params: Params, idx: jax.Array) -> jax.Array:
+        logits, _ = forward(params, idx, cfg, targets=None)
+        return logits
+
+    return forward_logits
+
+
+def left_pad_block(token_ids: list[int], block_size: int) -> np.ndarray:
+    """Left-pad / crop ``token_ids`` to length ``block_size`` (int32).
+
+    Padding uses id ``0`` so the tensor shape stays fixed for a single JIT
+    compile during autoregressive sampling. The last index is always the
+    newest real token.
+    """
+    ctx = token_ids[-block_size:]
+    t = len(ctx)
+    out = np.zeros((block_size,), dtype=np.int32)
+    out[block_size - t :] = np.asarray(ctx, dtype=np.int32)
+    return out
