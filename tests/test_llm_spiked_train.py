@@ -77,7 +77,9 @@ def test_train_two_steps_writes_checkpoint(tmp_path: Path) -> None:
     cfg_path = _write_smoke_config(tmp_path, data_dir, out_dir)
     params = train(cfg_path)
     assert params["wte"].shape[0] == CharTokenizer.load(data_dir / "tokenizer.json").vocab_size
-    assert (out_dir / "ckpt_1.pkl").is_file() or (out_dir / "ckpt_2.pkl").is_file()
+    assert (out_dir / "ckpt_2_weights.pkl").is_file() or (out_dir / "ckpt_1_weights.pkl").is_file()
+    # * Full optimizer pickle only on the final step.
+    assert (out_dir / "ckpt_2.pkl").is_file()
 
 
 def test_estimate_loss_keys(tmp_path: Path) -> None:

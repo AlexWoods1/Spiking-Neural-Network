@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from functools import lru_cache
+from typing import Any, Callable
 
 import numpy as np
 
@@ -17,6 +18,7 @@ from spiking_neural_network.LLM_spiked.config import ModelConfig
 from spiking_neural_network.LLM_spiked.spikes import spike
 
 Params = dict[str, Any]
+LogitsFn = Callable[[Params, jax.Array], jax.Array]
 
 
 def _layer_norm(
@@ -64,55 +66,53 @@ def _causal_self_attention(
     return y
 
 
+def _spiking_lstm_step(
+    carry: tuple[jax.Array, jax.Array, jax.Array],
+    x_t: jax.Array,
+    params: Params,
+    cfg: ModelConfig,
+) -> tuple[tuple[jax.Array, jax.Array, jax.Array], jax.Array]:
+    """One Spiking LSTM step: spike ``i/f/o``, tanh candidate / hidden."""
+    h, cell, gate_u = carry
+    w = params["W"]
+    u_rec = params["U"]
+    bias_vec = params.get("b")
+    drive = x_t @ w + h @ u_rec
+    if bias_vec is not None:
+        drive = drive + bias_vec
+    # * LIF membrane on gate channels; soft-reset after spikes.
+    gate_u = cfg.leak * gate_u + (1.0 - cfg.leak) * drive
+    i_pre, f_pre, g_pre, o_pre = jnp.split(gate_u, 4, axis=-1)
+    i = spike(i_pre, cfg.v_th, cfg.v_minus, cfg.v_plus, cfg.alpha, cfg.beta)
+    f = spike(f_pre, cfg.v_th, cfg.v_minus, cfg.v_plus, cfg.alpha, cfg.beta)
+    o = spike(o_pre, cfg.v_th, cfg.v_minus, cfg.v_plus, cfg.alpha, cfg.beta)
+    # * Continuous cell write (tanh) — avoids dead binary hidden states.
+    g = jnp.tanh(g_pre)
+    gate_u = gate_u - cfg.v_th * jnp.concatenate(
+        [i, f, jnp.zeros_like(g), o], axis=-1
+    )
+    cell_new = f * (cfg.leak * cell) + i * g
+    h_new = o * jnp.tanh(cell_new)
+    return (h_new, cell_new, gate_u), h_new
+
+
 def _spiking_lstm(
     x: jax.Array,
     params: Params,
     cfg: ModelConfig,
 ) -> jax.Array:
-    """Scan Spiking LSTM over sequence length ``T``.
-
-    Gate drives integrate as LIF membranes (leak + soft reset), then fire via
-    AdaLi spike nonlinearities. The cell state also leaks by ``cfg.leak``.
-    """
+    """Scan Spiking LSTM over sequence length ``T``."""
     b, _t, c = x.shape
-    w = params["W"]  # (C, 4C)
-    u_rec = params["U"]  # (C, 4C)
-    bias_vec = params.get("b")
 
     def step(
         carry: tuple[jax.Array, jax.Array, jax.Array],
         x_t: jax.Array,
     ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], jax.Array]:
-        h, cell, gate_u = carry
-        drive = x_t @ w + h @ u_rec
-        if bias_vec is not None:
-            drive = drive + bias_vec
-        # * LIF membrane on concatenated gate channels (i, f, g, o).
-        gate_u = cfg.leak * gate_u + (1.0 - cfg.leak) * drive
-        i, f, g, o = jnp.split(
-            spike(
-                gate_u,
-                cfg.v_th,
-                cfg.v_minus,
-                cfg.v_plus,
-                cfg.alpha,
-                cfg.beta,
-            ),
-            4,
-            axis=-1,
-        )
-        gate_u = gate_u - cfg.v_th * jnp.concatenate([i, f, g, o], axis=-1)
-        # * Leaky cell + spike-gated write; hidden is spike-gated cell spike.
-        cell_new = f * (cfg.leak * cell) + i * g
-        h_new = o * spike(
-            cell_new, cfg.v_th, cfg.v_minus, cfg.v_plus, cfg.alpha, cfg.beta
-        )
-        return (h_new, cell_new, gate_u), h_new
+        return _spiking_lstm_step(carry, x_t, params, cfg)
 
     h0 = jnp.zeros((b, c), dtype=x.dtype)
     c0 = jnp.zeros((b, c), dtype=x.dtype)
     gate_u0 = jnp.zeros((b, 4 * c), dtype=x.dtype)
-    # x is (B, T, C); scan expects time-major (T, B, C)
     x_tm = jnp.swapaxes(x, 0, 1)
     _, h_seq = lax.scan(step, (h0, c0, gate_u0), x_tm)
     return jnp.swapaxes(h_seq, 0, 1)
@@ -173,10 +173,15 @@ def init_params(cfg: ModelConfig, rng: jax.Array) -> Params:
         }
         # * Larger LSTM scale so gate membranes reach threshold under LIF leak.
         lstm_scale = 1.0 / jnp.sqrt(c)
+        lstm_b = None
+        if cfg.bias:
+            lstm_b = jnp.zeros((4 * c,))
+            # * Forget-gate bias > 0 so memory starts open.
+            lstm_b = lstm_b.at[c : 2 * c].set(1.0)
         lstm = {
             "W": jax.random.normal(keys[k + 2], (c, 4 * c)) * lstm_scale,
             "U": jax.random.normal(keys[k + 3], (c, 4 * c)) * lstm_scale,
-            "b": jnp.zeros((4 * c,)) if cfg.bias else None,
+            "b": lstm_b,
         }
         ln1 = {
             "scale": jnp.ones((c,)),
@@ -233,7 +238,6 @@ def forward(
     logits = x @ params["wte"].T
     loss = None
     if targets is not None:
-        # ignore_index=-1: mask positions with target -1
         vocab = logits.shape[-1]
         flat_logits = logits.reshape(-1, vocab)
         flat_targets = targets.reshape(-1)
@@ -244,7 +248,6 @@ def forward(
 def _cross_entropy(logits: jax.Array, targets: jax.Array) -> jax.Array:
     """Mean token cross-entropy; targets equal to -1 are ignored."""
     valid = targets != -1
-    # * Clamp ignored targets to 0 so one_hot is well-defined; masked out below.
     safe_targets = jnp.where(valid, targets, 0)
     log_probs = jax.nn.log_softmax(logits, axis=-1)
     nll = -jnp.take_along_axis(log_probs, safe_targets[:, None], axis=-1).squeeze(-1)
@@ -265,15 +268,53 @@ def loss_fn(
     return loss
 
 
-def bind_forward_logits(cfg: ModelConfig):
-    """Return a JIT logits function closed over ``cfg`` (fixed compile).
+def _cfg_cache_key(cfg: ModelConfig) -> tuple[Any, ...]:
+    return (
+        cfg.n_layer,
+        cfg.n_head,
+        cfg.n_embd,
+        cfg.block_size,
+        cfg.vocab_size,
+        cfg.bias,
+        cfg.v_th,
+        cfg.leak,
+        cfg.v_minus,
+        cfg.v_plus,
+        cfg.alpha,
+        cfg.beta,
+    )
 
-    Args:
-        cfg: Model configuration captured as compile-time constants.
 
-    Returns:
-        ``forward_logits(params, idx) -> logits`` with ``idx`` shape ``(B, T)``.
-    """
+@lru_cache(maxsize=8)
+def _bind_forward_logits_cached(key: tuple[Any, ...]) -> LogitsFn:
+    (
+        n_layer,
+        n_head,
+        n_embd,
+        block_size,
+        vocab_size,
+        bias,
+        v_th,
+        leak,
+        v_minus,
+        v_plus,
+        alpha,
+        beta,
+    ) = key
+    cfg = ModelConfig(
+        n_layer=n_layer,
+        n_head=n_head,
+        n_embd=n_embd,
+        block_size=block_size,
+        vocab_size=vocab_size,
+        bias=bias,
+        v_th=v_th,
+        leak=leak,
+        v_minus=v_minus,
+        v_plus=v_plus,
+        alpha=alpha,
+        beta=beta,
+    )
 
     @jax.jit
     def forward_logits(params: Params, idx: jax.Array) -> jax.Array:
@@ -281,6 +322,21 @@ def bind_forward_logits(cfg: ModelConfig):
         return logits
 
     return forward_logits
+
+
+def bind_forward_logits(cfg: ModelConfig) -> LogitsFn:
+    """Return a cached JIT logits function closed over ``cfg``."""
+    return _bind_forward_logits_cached(_cfg_cache_key(cfg))
+
+
+def bind_loss_fn(cfg: ModelConfig) -> Callable[[Params, jax.Array, jax.Array], jax.Array]:
+    """Return a JIT loss function closed over ``cfg``."""
+
+    @jax.jit
+    def _loss(params: Params, idx: jax.Array, targets: jax.Array) -> jax.Array:
+        return loss_fn(params, idx, targets, cfg)
+
+    return _loss
 
 
 def left_pad_block(token_ids: list[int], block_size: int) -> np.ndarray:

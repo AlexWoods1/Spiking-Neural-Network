@@ -24,10 +24,10 @@ train:
   beta2: 0.99
   warmup_steps: 5
   grad_clip: 1.0
-  eval_interval: 10
+  eval_interval: 50
   eval_batches: 2
-  sample_interval: 25
-  checkpoint_interval: 50
+  sample_interval: 100
+  checkpoint_interval: 100
   seed: 1337
 
 data:

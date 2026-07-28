@@ -23,12 +23,12 @@ from spiking_neural_network.LLM_spiked.data import CharDataset, CharTokenizer
 from spiking_neural_network.LLM_spiked.model import (
     Params,
     bind_forward_logits,
+    bind_loss_fn,
     count_parameters,
-    forward,
     init_params,
     left_pad_block,
-    loss_fn,
 )
+from spiking_neural_network.LLM_spiked.generate import weights_checkpoint_path
 
 
 def get_lr(step: int, cfg: TrainConfig) -> float:
@@ -47,8 +47,11 @@ def estimate_loss(
     params: Params,
     data: CharDataset,
     cfg: Config,
+    *,
+    loss_jit: Any | None = None,
 ) -> dict[str, float]:
-    """Average CE over ``eval_batches`` random batches per split."""
+    """Average CE over ``eval_batches`` random batches per split (JIT loss)."""
+    loss_jit = loss_jit or bind_loss_fn(cfg.model)
     out: dict[str, float] = {}
     for split in ("train", "val"):
         losses: list[float] = []
@@ -56,11 +59,10 @@ def estimate_loss(
             xb, yb = data.get_batch(
                 split, cfg.train.batch_size, cfg.model.block_size
             )
-            loss = loss_fn(
+            loss = loss_jit(
                 params,
-                jnp.asarray(xb),
-                jnp.asarray(yb),
-                cfg.model,
+                jax.device_put(jnp.asarray(xb)),
+                jax.device_put(jnp.asarray(yb)),
             )
             losses.append(float(loss))
         out[split] = float(np.mean(losses))
@@ -72,23 +74,24 @@ def sample_text(
     data: CharDataset,
     cfg: Config,
     *,
-    max_new_tokens: int = 100,
+    max_new_tokens: int = 40,
     temperature: float = 0.8,
     rng: np.random.Generator | None = None,
+    forward_logits: Any | None = None,
 ) -> str:
     """Generate a short continuation from a newline prompt (JIT logits)."""
     rng = rng if rng is not None else np.random.default_rng()
     prompt = "\n"
     ids = data.tokenizer.encode(prompt)
     block_size = cfg.model.block_size
-    forward_logits = bind_forward_logits(cfg.model)
+    forward_logits = forward_logits or bind_forward_logits(cfg.model)
     warm = left_pad_block(ids, block_size)
     _ = forward_logits(
-        params, jnp.asarray(warm[None, :], dtype=jnp.int32)
+        params, jax.device_put(jnp.asarray(warm[None, :], dtype=jnp.int32))
     ).block_until_ready()
     for _ in range(max_new_tokens):
         ctx = left_pad_block(ids, block_size)
-        idx = jnp.asarray(ctx[None, :], dtype=jnp.int32)
+        idx = jax.device_put(jnp.asarray(ctx[None, :], dtype=jnp.int32))
         logits = forward_logits(params, idx)
         logits_last = np.asarray(logits[0, -1, :], dtype=np.float64)
         logits_last = logits_last / max(temperature, 1e-6)
@@ -117,20 +120,32 @@ def save_checkpoint(
     step: int,
     cfg: Config,
     tokenizer: CharTokenizer,
+    save_optimizer: bool = True,
 ) -> None:
-    """Write a pickle checkpoint with params, optimizer state, and metadata."""
+    """Write checkpoint pickles.
+
+    Always writes a light ``*_weights.pkl`` (params + config + vocab) for fast
+    generate loads. Optionally also writes the full checkpoint with optimizer.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "params": jax.tree.map(np.asarray, params),
-        "opt_state": opt_state,
+    params_np = jax.tree.map(np.asarray, params)
+    meta = {
+        "params": params_np,
         "step": step,
         "config": _config_dict_for_checkpoint(cfg),
         "tokenizer_path": str(cfg.paths.tokenizer_path),
         "chars": tokenizer.chars,
     }
-    with path.open("wb") as f:
-        pickle.dump(payload, f)
-    print(f"Wrote {path}")
+    weights_path = weights_checkpoint_path(path)
+    with weights_path.open("wb") as f:
+        pickle.dump(meta, f)
+    print(f"Wrote {weights_path}")
+
+    if save_optimizer:
+        payload = {**meta, "opt_state": opt_state}
+        with path.open("wb") as f:
+            pickle.dump(payload, f)
+        print(f"Wrote {path}")
 
 
 def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
@@ -165,8 +180,9 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
             weight_decay=cfg.train.weight_decay,
         ),
     )
-    # * Inject scheduled LR each step: adamw(..., lr=1) then scale by get_lr.
     opt_state = optimizer.init(params)
+    loss_jit = bind_loss_fn(cfg.model)
+    sample_logits = bind_forward_logits(cfg.model)
 
     @jax.jit
     def train_step(
@@ -176,41 +192,64 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
         yb: jax.Array,
         lr: jax.Array,
     ) -> tuple[Params, Any, jax.Array]:
-        loss, grads = jax.value_and_grad(loss_fn)(params, xb, yb, cfg.model)
+        def _loss(p: Params) -> jax.Array:
+            return loss_jit(p, xb, yb)
+
+        loss, grads = jax.value_and_grad(_loss)(params)
         updates, opt_state = optimizer.update(grads, opt_state, params)
-        # * Scale AdamW updates (built with lr=1) by the scheduled learning rate.
         updates = jax.tree.map(lambda u: u * lr, updates)
         params = optax.apply_updates(params, updates)
         return params, opt_state, loss
 
     cfg.paths.out_dir.mkdir(parents=True, exist_ok=True)
+
+    # * Prefetch first batch onto device.
+    xb_np, yb_np = data.get_batch(
+        "train", cfg.train.batch_size, cfg.model.block_size
+    )
+    xb = jax.device_put(jnp.asarray(xb_np))
+    yb = jax.device_put(jnp.asarray(yb_np))
+
     pbar = tqdm(range(1, cfg.train.max_steps + 1), desc="train")
     for step in pbar:
-        xb, yb = data.get_batch(
+        lr = get_lr(step, cfg.train)
+        # * Kick off host→device copy for the *next* step while this step runs.
+        next_xb_np, next_yb_np = data.get_batch(
             "train", cfg.train.batch_size, cfg.model.block_size
         )
-        lr = get_lr(step, cfg.train)
+        next_xb = jax.device_put(jnp.asarray(next_xb_np))
+        next_yb = jax.device_put(jnp.asarray(next_yb_np))
+
         params, opt_state, loss = train_step(
             params,
             opt_state,
-            jnp.asarray(xb),
-            jnp.asarray(yb),
+            xb,
+            yb,
             jnp.asarray(lr, dtype=jnp.float32),
         )
         pbar.set_postfix(loss=float(loss), lr=lr)
+        xb, yb = next_xb, next_yb
 
         if step % cfg.train.eval_interval == 0 or step == cfg.train.max_steps:
-            losses = estimate_loss(params, data, cfg)
+            losses = estimate_loss(params, data, cfg, loss_jit=loss_jit)
             print(
                 f"step {step}: train {losses['train']:.4f} "
                 f"val {losses['val']:.4f}"
             )
 
         if step % cfg.train.sample_interval == 0:
-            text = sample_text(params, data, cfg, rng=rng_np)
+            text = sample_text(
+                params,
+                data,
+                cfg,
+                max_new_tokens=40,
+                rng=rng_np,
+                forward_logits=sample_logits,
+            )
             print(f"--- sample @ {step} ---\n{text}\n---------------")
 
         if step % cfg.train.checkpoint_interval == 0 or step == cfg.train.max_steps:
+            # * Full opt-state ckpt only at the end; weights every interval.
             save_checkpoint(
                 cfg.paths.out_dir / f"ckpt_{step}.pkl",
                 params=params,
@@ -218,6 +257,7 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
                 step=step,
                 cfg=cfg,
                 tokenizer=data.tokenizer,
+                save_optimizer=(step == cfg.train.max_steps),
             )
 
     return params

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 try:
+    import jax
     import jax.numpy as jnp
 except ImportError as exc:
     raise ImportError("Install jax to use LLM_spiked.generate") from exc
@@ -22,6 +23,28 @@ from spiking_neural_network.LLM_spiked.model import (
 )
 
 
+def weights_checkpoint_path(path: Path) -> Path:
+    """Return the params-only sibling path for ``ckpt_N.pkl``."""
+    path = Path(path)
+    if path.name.endswith("_weights.pkl"):
+        return path
+    return path.with_name(f"{path.stem}_weights.pkl")
+
+
+def resolve_checkpoint_path(chkpt_path: Path) -> Path:
+    """Prefer a light ``*_weights.pkl`` sibling when present."""
+    chkpt_path = Path(chkpt_path)
+    weights = weights_checkpoint_path(chkpt_path)
+    if weights.is_file():
+        return weights
+    if chkpt_path.name.endswith("_weights.pkl") and chkpt_path.is_file():
+        return chkpt_path
+    # * Allow passing ckpt_5000.pkl when only ckpt_5000_weights.pkl exists.
+    if not chkpt_path.is_file() and weights.is_file():
+        return weights
+    return chkpt_path
+
+
 def load_checkpoint(
     chkpt_path: str | Path,
     *,
@@ -29,14 +52,16 @@ def load_checkpoint(
 ) -> tuple[Params, ModelConfig, CharTokenizer]:
     """Load params, model config, and tokenizer from a pickle checkpoint.
 
+    Prefers ``*_weights.pkl`` (no optimizer state) when available.
+
     Args:
-        chkpt_path: Path to ``ckpt_*.pkl``.
+        chkpt_path: Path to ``ckpt_*.pkl`` or ``ckpt_*_weights.pkl``.
         tokenizer_path: Optional override for the tokenizer JSON path.
 
     Returns:
         ``(params, model_config, tokenizer)``.
     """
-    chkpt_path = Path(chkpt_path)
+    chkpt_path = resolve_checkpoint_path(Path(chkpt_path))
     with chkpt_path.open("rb") as f:
         chkpt = pickle.load(f)
 
@@ -57,11 +82,9 @@ def load_checkpoint(
 
 
 def jax_tree_to_jnp(tree: Params) -> Params:
-    """Convert numpy leaves in a pytree to JAX arrays."""
-    import jax
-
+    """Convert numpy leaves in a pytree to JAX arrays on the default device."""
     return jax.tree.map(
-        lambda x: jnp.asarray(x) if x is not None else None,
+        lambda x: jax.device_put(jnp.asarray(x)) if x is not None else None,
         tree,
     )
 
@@ -86,41 +109,27 @@ def generate(
 ) -> str:
     """Autoregressive character sampling from a SpikedLM checkpoint.
 
-    Uses a JIT logits fn with fixed ``block_size`` left-padding so each new
-    token reuses one compiled kernel instead of re-tracing every step.
-
-    Args:
-        params: Model parameters.
-        tok: Character tokenizer.
-        model_cfg: Model configuration (block size, spike hypers, …).
-        prompt: Seed text.
-        max_tokens: Number of new characters to sample.
-        temperature: Softmax temperature.
-        top_k: Optional top-k filtering.
-        seed: Numpy RNG seed.
-
-    Returns:
-        Prompt plus generated continuation.
+    Uses a cached JIT logits fn with fixed ``block_size`` left-padding.
     """
     rng = np.random.default_rng(seed)
     ids = tok.encode(prompt) if prompt else tok.encode("\n")
     block_size = model_cfg.block_size
     forward_logits = bind_forward_logits(model_cfg)
 
-    # * Warmup compile once with the fixed (1, block_size) shape.
     warm = left_pad_block(ids, block_size)
-    _ = forward_logits(params, jnp.asarray(warm[None, :], dtype=jnp.int32)).block_until_ready()
+    _ = forward_logits(
+        params, jax.device_put(jnp.asarray(warm[None, :], dtype=jnp.int32))
+    ).block_until_ready()
 
     for _ in range(max_tokens):
         ctx = left_pad_block(ids, block_size)
-        idx = jnp.asarray(ctx[None, :], dtype=jnp.int32)
+        idx = jax.device_put(jnp.asarray(ctx[None, :], dtype=jnp.int32))
         logits = forward_logits(params, idx)
         logits_last = np.asarray(logits[0, -1, :], dtype=np.float64)
         logits_last = logits_last / max(temperature, 1e-6)
         if top_k is not None and top_k > 0:
             logits_last = apply_top_k(logits_last, top_k)
         logits_last = logits_last - np.nanmax(logits_last)
-        # * Replace -inf after top-k so exp stays well-behaved.
         probs = np.exp(np.where(np.isfinite(logits_last), logits_last, -1e10))
         probs = probs / probs.sum()
         next_id = int(rng.choice(len(probs), p=probs))
