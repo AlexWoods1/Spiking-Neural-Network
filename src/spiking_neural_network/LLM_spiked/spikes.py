@@ -13,18 +13,21 @@ from spiking_neural_network.adali.jax_ops import adali_surrogate
 
 def _spike_fwd(
     u: jax.Array,
-    v_th: float,
+    v_th: jax.Array | float,
     v_minus: float,
     v_plus: float,
     alpha: float,
     beta: float,
-) -> tuple[jax.Array, tuple[jax.Array, float, float, float, float, float]]:
+) -> tuple[
+    jax.Array,
+    tuple[jax.Array, jax.Array | float, float, float, float, float],
+]:
     spikes = jnp.where(u >= v_th, 1.0, 0.0)
     return spikes, (u, v_th, v_minus, v_plus, alpha, beta)
 
 
 def _spike_bwd(
-    res: tuple[jax.Array, float, float, float, float, float],
+    res: tuple[jax.Array, jax.Array | float, float, float, float, float],
     g: jax.Array,
 ) -> tuple[jax.Array, None, None, None, None, None]:
     u, v_th, v_minus, v_plus, alpha, beta = res
@@ -43,7 +46,7 @@ def _spike_bwd(
 @jax.custom_vjp
 def spike(
     u: jax.Array,
-    v_th: float,
+    v_th: jax.Array | float,
     v_minus: float,
     v_plus: float,
     alpha: float,
@@ -56,7 +59,7 @@ def spike(
 
     Args:
         u: Pre-spike membrane / gate pre-activations.
-        v_th: Spike threshold.
+        v_th: Spike threshold (scalar float or 0-d array).
         v_minus: Lower surrogate support bound.
         v_plus: Upper surrogate support bound.
         alpha: Surrogate slope scale below threshold.

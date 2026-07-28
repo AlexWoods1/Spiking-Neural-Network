@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import pickle
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -15,12 +16,15 @@ except ImportError as exc:
     raise ImportError("Install jax to use LLM_spiked.generate") from exc
 
 from spiking_neural_network.LLM_spiked.config import ModelConfig
-from spiking_neural_network.LLM_spiked.data import CharTokenizer
+from spiking_neural_network.LLM_spiked.data import CharTokenizer, load_tokenizer
+from spiking_neural_network.LLM_spiked.tokenizer import ByteBPETokenizer
 from spiking_neural_network.LLM_spiked.model import (
     Params,
-    bind_forward_logits,
-    left_pad_block,
+    bind_generate_fns,
+    right_pad_block,
 )
+
+TokenizerLike = CharTokenizer | ByteBPETokenizer
 
 
 def weights_checkpoint_path(path: Path) -> Path:
@@ -39,7 +43,6 @@ def resolve_checkpoint_path(chkpt_path: Path) -> Path:
         return weights
     if chkpt_path.name.endswith("_weights.pkl") and chkpt_path.is_file():
         return chkpt_path
-    # * Allow passing ckpt_5000.pkl when only ckpt_5000_weights.pkl exists.
     if not chkpt_path.is_file() and weights.is_file():
         return weights
     return chkpt_path
@@ -49,34 +52,29 @@ def load_checkpoint(
     chkpt_path: str | Path,
     *,
     tokenizer_path: str | Path | None = None,
-) -> tuple[Params, ModelConfig, CharTokenizer]:
-    """Load params, model config, and tokenizer from a pickle checkpoint.
-
-    Prefers ``*_weights.pkl`` (no optimizer state) when available.
-
-    Args:
-        chkpt_path: Path to ``ckpt_*.pkl`` or ``ckpt_*_weights.pkl``.
-        tokenizer_path: Optional override for the tokenizer JSON path.
-
-    Returns:
-        ``(params, model_config, tokenizer)``.
-    """
+) -> tuple[Params, ModelConfig, TokenizerLike]:
+    """Load params, model config, and tokenizer from a pickle checkpoint."""
     chkpt_path = resolve_checkpoint_path(Path(chkpt_path))
     with chkpt_path.open("rb") as f:
         chkpt = pickle.load(f)
 
-    model_cfg = ModelConfig(**chkpt["config"]["model"])
+    model_raw = dict(chkpt["config"]["model"])
+    # * Older checkpoints omit Nord-style training knobs; ModelConfig defaults apply.
+    model_cfg = ModelConfig(**model_raw)
     params: Params = jax_tree_to_jnp(chkpt["params"])
 
     tok_path = Path(tokenizer_path or chkpt.get("tokenizer_path", ""))
     if tok_path.is_file():
-        tok = CharTokenizer.load(tok_path)
+        tok: TokenizerLike = load_tokenizer(tok_path)
+    elif chkpt.get("tokenizer_kind") == "bpe" or "merges" in chkpt:
+        tok = ByteBPETokenizer()
+        tok.merges = [tuple(pair) for pair in chkpt["merges"]]
     elif "chars" in chkpt:
         tok = CharTokenizer(list(chkpt["chars"]))
     else:
         raise FileNotFoundError(
             f"Tokenizer not found: {tok_path}. Pass --tokenizer-path or "
-            "ensure the checkpoint stores chars."
+            "ensure the checkpoint stores chars/merges."
         )
     return params, model_cfg, tok
 
@@ -96,9 +94,26 @@ def apply_top_k(logits: np.ndarray, top_k: int) -> np.ndarray:
     return np.where(logits < thresh, -np.inf, logits)
 
 
+def _sample_token(
+    logits: np.ndarray,
+    *,
+    temperature: float,
+    top_k: int | None,
+    rng: np.random.Generator,
+) -> int:
+    logits = np.asarray(logits, dtype=np.float64)
+    logits = logits / max(temperature, 1e-6)
+    if top_k is not None and top_k > 0:
+        logits = apply_top_k(logits, top_k)
+    logits = logits - np.nanmax(logits)
+    probs = np.exp(np.where(np.isfinite(logits), logits, -1e10))
+    probs = probs / probs.sum()
+    return int(rng.choice(len(probs), p=probs))
+
+
 def generate(
     params: Params,
-    tok: CharTokenizer,
+    tok: TokenizerLike,
     model_cfg: ModelConfig,
     prompt: str,
     *,
@@ -107,33 +122,43 @@ def generate(
     top_k: int | None = None,
     seed: int = 0,
 ) -> str:
-    """Autoregressive character sampling from a SpikedLM checkpoint.
+    """Autoregressive sampling with KV cache + LSTM carry.
 
-    Uses a cached JIT logits fn with fixed ``block_size`` left-padding.
+    Prefills the prompt once, then decodes one token at a time without
+    rescanning the full window (until the cache fills and must slide).
     """
     rng = np.random.default_rng(seed)
     ids = tok.encode(prompt) if prompt else tok.encode("\n")
+    if not ids:
+        ids = tok.encode("\n")
     block_size = model_cfg.block_size
-    forward_logits = bind_forward_logits(model_cfg)
+    prefill_fn, decode_fn = bind_generate_fns(model_cfg)
 
-    warm = left_pad_block(ids, block_size)
-    _ = forward_logits(
-        params, jax.device_put(jnp.asarray(warm[None, :], dtype=jnp.int32))
-    ).block_until_ready()
+    def _prefill_from_ids(token_ids: list[int]) -> tuple[np.ndarray, Any, int]:
+        padded, length = right_pad_block(token_ids, block_size)
+        tokens = jax.device_put(jnp.asarray(padded[None, :], dtype=jnp.int32))
+        logits, cache = prefill_fn(params, tokens, int(length))
+        return np.asarray(logits[0]), cache, length - 1
 
+    logits, cache, t = _prefill_from_ids(ids)
     for _ in range(max_tokens):
-        ctx = left_pad_block(ids, block_size)
-        idx = jax.device_put(jnp.asarray(ctx[None, :], dtype=jnp.int32))
-        logits = forward_logits(params, idx)
-        logits_last = np.asarray(logits[0, -1, :], dtype=np.float64)
-        logits_last = logits_last / max(temperature, 1e-6)
-        if top_k is not None and top_k > 0:
-            logits_last = apply_top_k(logits_last, top_k)
-        logits_last = logits_last - np.nanmax(logits_last)
-        probs = np.exp(np.where(np.isfinite(logits_last), logits_last, -1e10))
-        probs = probs / probs.sum()
-        next_id = int(rng.choice(len(probs), p=probs))
+        next_id = _sample_token(
+            logits, temperature=temperature, top_k=top_k, rng=rng
+        )
         ids.append(next_id)
+        if t + 1 < block_size:
+            t = t + 1
+            logits_j, cache = decode_fn(
+                params,
+                jax.device_put(jnp.asarray([next_id], dtype=jnp.int32)),
+                cache,
+                jnp.asarray(t, dtype=jnp.int32),
+            )
+            logits = np.asarray(logits_j[0])
+        else:
+            # * Sliding window: rebuild cache from the last block_size tokens.
+            logits, cache, t = _prefill_from_ids(ids)
+
     return tok.decode(ids)
 
 

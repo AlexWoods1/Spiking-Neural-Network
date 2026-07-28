@@ -5,7 +5,7 @@ model:
   n_head: 4
   n_embd: 128
   block_size: 256
-  vocab_size: 65       # overridden from char tokenizer at train time
+  vocab_size: 1024     # overridden from tokenizer at train time
   dropout: 0.1
   bias: true
   v_th: 0.5
@@ -14,6 +14,13 @@ model:
   v_plus: 2.0
   alpha: 1.0
   beta: 1.0
+  learnable_lif: true
+  leaky_clamp_slope: 0.2
+  spike_rate_weight: 0.25
+  target_rate_i: 0.3
+  target_rate_f: 0.5
+  target_rate_o: 0.4
+  rate_floor: 0.05
 
 train:
   batch_size: 32

@@ -81,3 +81,29 @@ def test_bin_cache_reuse(tmp_path: Path) -> None:
     CharDataset(tmp_path, tmp_path / "tokenizer.json")
     assert (tmp_path / "train.bin").is_file()
     CharDataset(tmp_path, tmp_path / "tokenizer.json")
+
+
+def test_byte_bpe_roundtrip_and_dataset(tmp_path: Path) -> None:
+    from spiking_neural_network.LLM_spiked.data import load_tokenizer
+    from spiking_neural_network.LLM_spiked.tokenizer import ByteBPETokenizer
+
+    # * Varied text so BPE does not collapse the whole file into one token.
+    lines = [f"line {i} hello world shakespeare romeo\n" for i in range(400)]
+    text = "".join(lines)
+    (tmp_path / "train.txt").write_text(text, encoding="utf-8")
+    (tmp_path / "val.txt").write_text("".join(lines[:80]), encoding="utf-8")
+    tok = ByteBPETokenizer()
+    tok.train(text, vocab_size=400)
+    tok.save(tmp_path / "tokenizer.json")
+    assert 256 < tok.vocab_size <= 400
+    assert tok.decode(tok.encode("hello")) == "hello"
+    loaded = load_tokenizer(tmp_path / "tokenizer.json")
+    assert isinstance(loaded, ByteBPETokenizer)
+    assert loaded.vocab_size == tok.vocab_size
+    with pytest.raises(ValueError, match=">= 256"):
+        ByteBPETokenizer().train("ab", vocab_size=100)
+    data = CharDataset(tmp_path, tmp_path / "tokenizer.json", rng=np.random.default_rng(0))
+    assert len(data.train) > 32
+    x, y = data.get_batch("train", batch_size=2, block_size=16)
+    assert x.shape == (2, 16)
+    assert np.all(y[:, :-1] == x[:, 1:])

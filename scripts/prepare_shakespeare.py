@@ -1,4 +1,4 @@
-"""Download tinyshakespeare and write train/val splits plus a char tokenizer."""
+"""Download tinyshakespeare and write train/val splits plus a tokenizer."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 from spiking_neural_network.LLM_spiked.data import CharTokenizer
+from spiking_neural_network.LLM_spiked.tokenizer import ByteBPETokenizer
 
 SHAKESPEARE_URL = (
     "https://raw.githubusercontent.com/karpathy/char-rnn/master/"
@@ -41,9 +42,20 @@ def write_splits(out_dir: Path, train: str, val: str) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Prepare Shakespeare char LM data.")
+    p = argparse.ArgumentParser(description="Prepare Shakespeare LM data.")
     p.add_argument("--out", type=Path, required=True, help="Output directory")
     p.add_argument("--train-frac", type=float, default=0.9)
+    p.add_argument(
+        "--vocab-size",
+        type=int,
+        default=1024,
+        help="Byte-BPE vocab size (ignored with --char)",
+    )
+    p.add_argument(
+        "--char",
+        action="store_true",
+        help="Use character tokenizer instead of byte-level BPE",
+    )
     return p.parse_args()
 
 
@@ -52,11 +64,18 @@ def main() -> None:
     text = download_shakespeare()
     train, val = split_train_val(text, args.train_frac)
     write_splits(args.out, train, val)
-    # * Vocab from the full corpus so train/val share the same stoi map.
-    tok = CharTokenizer.from_text(text)
     tok_path = args.out / "tokenizer.json"
-    tok.save(tok_path)
-    print(f"Wrote {tok_path} (vocab_size={tok.vocab_size})")
+    if args.char:
+        # * Vocab from the full corpus so train/val share the same stoi map.
+        tok = CharTokenizer.from_text(text)
+        tok.save(tok_path)
+        print(f"Wrote {tok_path} (char vocab_size={tok.vocab_size})")
+    else:
+        # * Train BPE on the full corpus (same merges for train/val).
+        tok = ByteBPETokenizer()
+        tok.train(text, args.vocab_size)
+        tok.save(tok_path)
+        print(f"Wrote {tok_path} (bpe vocab_size={tok.vocab_size})")
 
 
 if __name__ == "__main__":

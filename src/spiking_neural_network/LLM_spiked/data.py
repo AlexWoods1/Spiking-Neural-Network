@@ -1,11 +1,36 @@
-"""Char-level Shakespeare dataset and batching for SpikedLM."""
+"""Shakespeare dataset and batching for SpikedLM (char or byte-BPE)."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 import numpy as np
+
+from spiking_neural_network.LLM_spiked.tokenizer import ByteBPETokenizer
+
+__all__ = [
+    "ByteBPETokenizer",
+    "CharDataset",
+    "CharTokenizer",
+    "TokenizerProtocol",
+    "load_tokenizer",
+]
+
+
+@runtime_checkable
+class TokenizerProtocol(Protocol):
+    """Minimal encode/decode interface used by train and generate."""
+
+    @property
+    def vocab_size(self) -> int: ...
+
+    def encode(self, text: str) -> list[int]: ...
+
+    def decode(self, ids: list[int]) -> str: ...
+
+    def save(self, path: Path | str) -> None: ...
 
 
 class CharTokenizer:
@@ -67,6 +92,21 @@ class CharTokenizer:
         return cls(chars)
 
 
+def load_tokenizer(path: Path | str) -> CharTokenizer | ByteBPETokenizer:
+    """Load char or byte-BPE tokenizer by inspecting JSON keys."""
+    path = Path(path)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"Invalid tokenizer file: {path}")
+    if "merges" in raw:
+        return ByteBPETokenizer.load(path)
+    if "chars" in raw:
+        return CharTokenizer.load(path)
+    raise ValueError(
+        f"Invalid tokenizer file (expected 'merges' or 'chars'): {path}"
+    )
+
+
 def _bin_path(txt_path: Path) -> Path:
     return txt_path.with_suffix(".bin")
 
@@ -84,7 +124,7 @@ def _cache_is_fresh(txt_path: Path, bin_path: Path, tokenizer_path: Path) -> boo
 def _encode_and_cache(
     txt_path: Path,
     bin_path: Path,
-    tokenizer: CharTokenizer,
+    tokenizer: TokenizerProtocol,
 ) -> np.ndarray:
     """Encode text to token ids and write a uint16 ``.bin`` cache."""
     text = txt_path.read_text(encoding="utf-8")
@@ -103,7 +143,7 @@ def _encode_and_cache(
 def _load_or_encode(
     txt_path: Path,
     tokenizer_path: Path,
-    tokenizer: CharTokenizer,
+    tokenizer: TokenizerProtocol,
 ) -> np.ndarray:
     if not txt_path.is_file():
         raise FileNotFoundError(f"Missing text file: {txt_path}")
@@ -127,10 +167,16 @@ class CharDataset:
     ) -> None:
         data_dir = Path(data_dir)
         tokenizer_path = Path(tokenizer_path)
-        self.tokenizer = CharTokenizer.load(tokenizer_path)
+        self.tokenizer: CharTokenizer | ByteBPETokenizer = load_tokenizer(
+            tokenizer_path
+        )
         self.tokenizer_path = tokenizer_path
-        self.train = _load_or_encode(data_dir / "train.txt", tokenizer_path, self.tokenizer)
-        self.val = _load_or_encode(data_dir / "val.txt", tokenizer_path, self.tokenizer)
+        self.train = _load_or_encode(
+            data_dir / "train.txt", tokenizer_path, self.tokenizer
+        )
+        self.val = _load_or_encode(
+            data_dir / "val.txt", tokenizer_path, self.tokenizer
+        )
         self.rng = rng if rng is not None else np.random.default_rng()
 
     def get_batch(

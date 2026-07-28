@@ -63,6 +63,14 @@ class ModelConfig:
     v_plus: float = 2.0
     alpha: float = 1.0
     beta: float = 1.0
+    # * Nord-style training knobs (defaults keep prior behavior when weight=0).
+    learnable_lif: bool = True
+    leaky_clamp_slope: float = 0.2
+    spike_rate_weight: float = 0.25
+    target_rate_i: float = 0.3
+    target_rate_f: float = 0.5
+    target_rate_o: float = 0.4
+    rate_floor: float = 0.05
 
     def __post_init__(self) -> None:
         _require_int_ge("n_layer", self.n_layer, 1)
@@ -76,6 +84,12 @@ class ModelConfig:
         _require_in_range("leak", self.leak, 0.0, 1.0)
         _require_float_ge("alpha", self.alpha, 0.0)
         _require_float_ge("beta", self.beta, 0.0)
+        _require_in_range("leaky_clamp_slope", self.leaky_clamp_slope, 0.0, 1.0)
+        _require_float_ge("spike_rate_weight", self.spike_rate_weight, 0.0)
+        _require_in_range("target_rate_i", self.target_rate_i, 0.0, 1.0)
+        _require_in_range("target_rate_f", self.target_rate_f, 0.0, 1.0)
+        _require_in_range("target_rate_o", self.target_rate_o, 0.0, 1.0)
+        _require_in_range("rate_floor", self.rate_floor, 0.0, 1.0)
         if self.v_minus >= self.v_th:
             raise ValueError("v_minus must be < v_th")
         if self.v_plus <= self.v_th:

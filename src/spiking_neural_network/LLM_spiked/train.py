@@ -21,15 +21,16 @@ except ImportError as exc:
 
 from spiking_neural_network.LLM_spiked.config import Config, TrainConfig, load_config
 from spiking_neural_network.LLM_spiked.data import CharDataset, CharTokenizer
+from spiking_neural_network.LLM_spiked.generate import generate, weights_checkpoint_path
 from spiking_neural_network.LLM_spiked.model import (
     Params,
-    bind_forward_logits,
+    bind_ce_loss_fn,
     bind_loss_fn,
+    bind_spike_rates_fn,
     count_parameters,
     init_params,
-    left_pad_block,
 )
-from spiking_neural_network.LLM_spiked.generate import weights_checkpoint_path
+from spiking_neural_network.LLM_spiked.tokenizer import ByteBPETokenizer
 
 
 def get_lr(step: int, cfg: TrainConfig) -> float:
@@ -65,7 +66,7 @@ def estimate_loss(
     loss_jit: Any | None = None,
 ) -> dict[str, float]:
     """Average CE over ``eval_batches`` random batches per split (JIT loss)."""
-    loss_jit = loss_jit or bind_loss_fn(cfg.model)
+    loss_jit = loss_jit or bind_ce_loss_fn(cfg.model)
     out: dict[str, float] = {}
     for split in ("train", "val"):
         losses: list[float] = []
@@ -83,6 +84,28 @@ def estimate_loss(
     return out
 
 
+def estimate_spike_rates(
+    params: Params,
+    data: CharDataset,
+    cfg: Config,
+    *,
+    rates_jit: Any | None = None,
+) -> dict[str, float]:
+    """Mean gate spike rates over one train batch."""
+    rates_jit = rates_jit or bind_spike_rates_fn(cfg.model)
+    xb, _yb = data.get_batch(
+        "train", cfg.train.batch_size, cfg.model.block_size
+    )
+    rate_i, rate_f, rate_o = rates_jit(
+        params, jax.device_put(jnp.asarray(xb))
+    )
+    return {
+        "rate_i": float(rate_i),
+        "rate_f": float(rate_f),
+        "rate_o": float(rate_o),
+    }
+
+
 def sample_text(
     params: Params,
     data: CharDataset,
@@ -93,28 +116,20 @@ def sample_text(
     rng: np.random.Generator | None = None,
     forward_logits: Any | None = None,
 ) -> str:
-    """Generate a short continuation from a newline prompt (JIT logits)."""
+    """Generate a short continuation via KV-cached decode."""
+    # * forward_logits kept for call-site compatibility; unused after KV path.
+    del forward_logits
     rng = rng if rng is not None else np.random.default_rng()
-    prompt = "\n"
-    ids = data.tokenizer.encode(prompt)
-    block_size = cfg.model.block_size
-    forward_logits = forward_logits or bind_forward_logits(cfg.model)
-    warm = left_pad_block(ids, block_size)
-    _ = forward_logits(
-        params, jax.device_put(jnp.asarray(warm[None, :], dtype=jnp.int32))
-    ).block_until_ready()
-    for _ in range(max_new_tokens):
-        ctx = left_pad_block(ids, block_size)
-        idx = jax.device_put(jnp.asarray(ctx[None, :], dtype=jnp.int32))
-        logits = forward_logits(params, idx)
-        logits_last = np.asarray(logits[0, -1, :], dtype=np.float64)
-        logits_last = logits_last / max(temperature, 1e-6)
-        logits_last = logits_last - logits_last.max()
-        probs = np.exp(logits_last)
-        probs = probs / probs.sum()
-        next_id = int(rng.choice(len(probs), p=probs))
-        ids.append(next_id)
-    return data.tokenizer.decode(ids)
+    seed = int(rng.integers(0, 2**31 - 1))
+    return generate(
+        params,
+        data.tokenizer,
+        cfg.model,
+        "\n",
+        max_tokens=max_new_tokens,
+        temperature=temperature,
+        seed=seed,
+    )
 
 
 def _config_dict_for_checkpoint(cfg: Config) -> dict[str, Any]:
@@ -126,6 +141,18 @@ def _config_dict_for_checkpoint(cfg: Config) -> dict[str, Any]:
     return raw
 
 
+def _tokenizer_checkpoint_fields(
+    tokenizer: CharTokenizer | ByteBPETokenizer,
+) -> dict[str, Any]:
+    """Embed tokenizer payload so generate works without the JSON file."""
+    if isinstance(tokenizer, CharTokenizer):
+        return {"tokenizer_kind": "char", "chars": tokenizer.chars}
+    return {
+        "tokenizer_kind": "bpe",
+        "merges": [list(pair) for pair in tokenizer.merges],
+    }
+
+
 def save_checkpoint(
     path: Path,
     *,
@@ -133,7 +160,7 @@ def save_checkpoint(
     opt_state: Any,
     step: int,
     cfg: Config,
-    tokenizer: CharTokenizer,
+    tokenizer: CharTokenizer | ByteBPETokenizer,
     save_optimizer: bool = True,
 ) -> None:
     """Write checkpoint pickles.
@@ -148,7 +175,7 @@ def save_checkpoint(
         "step": step,
         "config": _config_dict_for_checkpoint(cfg),
         "tokenizer_path": str(cfg.paths.tokenizer_path),
-        "chars": tokenizer.chars,
+        **_tokenizer_checkpoint_fields(tokenizer),
     }
     weights_path = weights_checkpoint_path(path)
     with weights_path.open("wb") as f:
@@ -197,7 +224,8 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
     )
     opt_state = optimizer.init(params)
     loss_jit = bind_loss_fn(cfg.model)
-    sample_logits = bind_forward_logits(cfg.model)
+    ce_jit = bind_ce_loss_fn(cfg.model)
+    rates_jit = bind_spike_rates_fn(cfg.model)
 
     @partial(jax.jit, donate_argnums=(0, 1))
     def train_step(
@@ -246,10 +274,14 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
         xb, yb = next_xb, next_yb
 
         if step % cfg.train.eval_interval == 0 or step == cfg.train.max_steps:
-            losses = estimate_loss(params, data, cfg, loss_jit=loss_jit)
+            losses = estimate_loss(params, data, cfg, loss_jit=ce_jit)
+            rates = estimate_spike_rates(params, data, cfg, rates_jit=rates_jit)
             print(
                 f"step {step}: train {losses['train']:.4f} "
-                f"val {losses['val']:.4f}"
+                f"val {losses['val']:.4f} "
+                f"rate_i={rates['rate_i']:.3f} "
+                f"rate_f={rates['rate_f']:.3f} "
+                f"rate_o={rates['rate_o']:.3f}"
             )
 
         if step % cfg.train.sample_interval == 0:
@@ -259,7 +291,6 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
                 cfg,
                 max_new_tokens=40,
                 rng=rng_np,
-                forward_logits=sample_logits,
             )
             print(f"--- sample @ {step} ---\n{text}\n---------------")
 
