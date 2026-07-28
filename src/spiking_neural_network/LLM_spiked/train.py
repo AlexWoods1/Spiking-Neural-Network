@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import pickle
 from dataclasses import asdict
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -198,7 +199,7 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
     loss_jit = bind_loss_fn(cfg.model)
     sample_logits = bind_forward_logits(cfg.model)
 
-    @jax.jit(donate_argnums=(0, 1))
+    @partial(jax.jit, donate_argnums=(0, 1))
     def train_step(
         params: Params,
         opt_state: Any,
