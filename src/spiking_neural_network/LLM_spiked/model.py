@@ -43,23 +43,33 @@ def _causal_self_attention(
     n_head: int,
     bias: bool,
 ) -> jax.Array:
-    """Fused QKV causal attention (STLM-style)."""
+    """Fused QKV causal attention; prefers ``jax.nn.dot_product_attention``."""
     b, t, c = x.shape
     head_dim = c // n_head
     qkv = x @ params["c_attn"]
     if bias and params.get("c_attn_bias") is not None:
         qkv = qkv + params["c_attn_bias"]
     q, k, v = jnp.split(qkv, 3, axis=-1)
-    # (B, n_head, T, head_dim)
-    q = q.reshape(b, t, n_head, head_dim).transpose(0, 2, 1, 3)
-    k = k.reshape(b, t, n_head, head_dim).transpose(0, 2, 1, 3)
-    v = v.reshape(b, t, n_head, head_dim).transpose(0, 2, 1, 3)
-    att = (q @ jnp.swapaxes(k, -2, -1)) * (1.0 / jnp.sqrt(head_dim))
-    mask = jnp.tril(jnp.ones((t, t), dtype=x.dtype))
-    att = jnp.where(mask[None, None, :, :] == 0, jnp.asarray(-1e10, dtype=x.dtype), att)
-    att = jax.nn.softmax(att, axis=-1)
-    y = att @ v
-    y = y.transpose(0, 2, 1, 3).reshape(b, t, c)
+    # * BTNH layout for SDPA / cuDNN flash when available.
+    q = q.reshape(b, t, n_head, head_dim)
+    k = k.reshape(b, t, n_head, head_dim)
+    v = v.reshape(b, t, n_head, head_dim)
+    sdpa = getattr(jax.nn, "dot_product_attention", None)
+    if sdpa is not None:
+        y = sdpa(q, k, v, is_causal=True)
+    else:
+        # Fallback: explicit scores (older JAX).
+        q_t = q.transpose(0, 2, 1, 3)
+        k_t = k.transpose(0, 2, 1, 3)
+        v_t = v.transpose(0, 2, 1, 3)
+        att = (q_t @ jnp.swapaxes(k_t, -2, -1)) * (1.0 / jnp.sqrt(head_dim))
+        mask = jnp.tril(jnp.ones((t, t), dtype=x.dtype))
+        att = jnp.where(
+            mask[None, None, :, :] == 0, jnp.asarray(-1e10, dtype=x.dtype), att
+        )
+        att = jax.nn.softmax(att, axis=-1)
+        y = (att @ v_t).transpose(0, 2, 1, 3)
+    y = y.reshape(b, t, c)
     y = y @ params["c_proj"]
     if bias and params.get("c_proj_bias") is not None:
         y = y + params["c_proj_bias"]
@@ -114,7 +124,8 @@ def _spiking_lstm(
     c0 = jnp.zeros((b, c), dtype=x.dtype)
     gate_u0 = jnp.zeros((b, 4 * c), dtype=x.dtype)
     x_tm = jnp.swapaxes(x, 0, 1)
-    _, h_seq = lax.scan(step, (h0, c0, gate_u0), x_tm)
+    # * Unroll cuts scan overhead on GPU for moderate T.
+    _, h_seq = lax.scan(step, (h0, c0, gate_u0), x_tm, unroll=8)
     return jnp.swapaxes(h_seq, 0, 1)
 
 

@@ -43,6 +43,19 @@ def get_lr(step: int, cfg: TrainConfig) -> float:
     return min_lr + coeff * (cfg.learning_rate - min_lr)
 
 
+def configure_runtime() -> None:
+    """Enable GPU-friendly XLA defaults when available."""
+    backend = jax.default_backend()
+    print(f"jax backend={backend} devices={jax.devices()}")
+    if backend == "gpu":
+        try:
+            # * Tensor-core matmuls; params stay fp32 via Optax updates.
+            jax.config.update("jax_default_matmul_precision", "bfloat16")
+            print("matmul precision=bfloat16")
+        except Exception as exc:  # noqa: BLE001
+            print(f"bf16 matmul not applied: {exc}")
+
+
 def estimate_loss(
     params: Params,
     data: CharDataset,
@@ -158,6 +171,7 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
         Trained parameter pytree.
     """
     cfg = load_config(config_path)
+    configure_runtime()
     rng_np = np.random.default_rng(cfg.train.seed)
     data = CharDataset(
         cfg.data.data_dir,
@@ -184,7 +198,7 @@ def train(config_path: str | Path = "configs/llm_smoke.yaml") -> Params:
     loss_jit = bind_loss_fn(cfg.model)
     sample_logits = bind_forward_logits(cfg.model)
 
-    @jax.jit
+    @jax.jit(donate_argnums=(0, 1))
     def train_step(
         params: Params,
         opt_state: Any,
