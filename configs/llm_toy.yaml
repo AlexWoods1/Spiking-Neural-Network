@@ -1,0 +1,40 @@
+# configs/llm_toy.yaml — longer SpikedLM Shakespeare run (CPU/GPU)
+
+model:
+  n_layer: 4
+  n_head: 4
+  n_embd: 128
+  block_size: 256
+  vocab_size: 65       # overridden from char tokenizer at train time
+  dropout: 0.1
+  bias: true
+  v_th: 0.5
+  leak: 0.5
+  v_minus: -1.0
+  v_plus: 2.0
+  alpha: 1.0
+  beta: 1.0
+
+train:
+  batch_size: 32
+  max_steps: 5000
+  learning_rate: 3.0e-4
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.99
+  warmup_steps: 100
+  grad_clip: 1.0
+  eval_interval: 100
+  eval_batches: 10
+  sample_interval: 500
+  checkpoint_interval: 1000
+  seed: 1337
+
+data:
+  dataset: shakespeare
+  data_dir: data/shakespeare
+  train_frac: 0.9
+
+paths:
+  out_dir: checkpoints/llm_toy
+  tokenizer_path: data/shakespeare/tokenizer.json

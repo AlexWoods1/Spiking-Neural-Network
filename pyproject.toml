@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=2.4.0",
     "opencv-python>=4.13.0.92",
     "optax>=0.2.8",
+    "pyyaml>=6.0.3",
     "tqdm>=4.68.3",
 ]
 
@@ -39,7 +40,7 @@ addopts = "--cov=spiking_neural_network --cov-report=term-missing"
 
 [tool.coverage.run]
 source = ["spiking_neural_network"]
-omit = ["*/tests/*"]
+omit = ["*/tests/*", "*/leaky_with_adaptation/*"]
 
 [tool.coverage.report]
 fail_under = 95

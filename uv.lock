@@ -1009,6 +1009,7 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "optax" },
+    { name = "pyyaml" },
     { name = "tqdm" },
 ]
 
@@ -1031,6 +1032,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.0" },
     { name = "opencv-python", specifier = ">=4.13.0.92" },
     { name = "optax", specifier = ">=0.2.8" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "tqdm", specifier = ">=4.68.3" },
 ]
 

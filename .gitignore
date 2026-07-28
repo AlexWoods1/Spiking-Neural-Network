@@ -51,6 +51,9 @@ coverage.xml
 .pytest_cache/
 cover/
 outputs/
+data/
+checkpoints/
+llm_spiked_bundle.zip
 
 # Translations
 *.mo
